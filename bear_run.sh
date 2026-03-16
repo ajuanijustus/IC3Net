@@ -7,8 +7,8 @@
 #SBATCH --nodes 1
 #SBATCH --ntasks 16
 
-#SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/logs/%x_%j.out
-#SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/logs/%x_%j.err
+#SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.out
+#SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.err
 
 set -e
 
@@ -20,7 +20,7 @@ module load Miniforge3/24.1.2-0
 eval "$(${EBROOTMINIFORGE3}/bin/conda shell.bash hook)" 
 source "${EBROOTMINIFORGE3}/etc/profile.d/mamba.sh"
 
-CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/${USER}_ic3_conda_env" 
+CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3" 
 export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs" 
 
 # Activate the environment
@@ -35,7 +35,6 @@ mkdir -p "${SAVE_DIR}"
 
 # Optional: timestamped run name
 RUN_NAME="run_$(date +%Y%m%d_%H%M%S)"
-
 SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
 
 echo "Saving to: ${SAVE_PATH}"

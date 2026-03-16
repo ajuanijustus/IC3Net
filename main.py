@@ -203,6 +203,7 @@ if args.plot:
     vis = visdom.Visdom(env=args.plot_env)
 
 def run(num_epochs):
+    print('Starting training interation.')
     for ep in range(num_epochs):
         epoch_begin_time = time.time()
         stat = dict()
@@ -282,6 +283,7 @@ if args.load != '':
     load(args.load)
 
 run(args.num_epochs)
+
 if args.display:
     env.end_display()
 

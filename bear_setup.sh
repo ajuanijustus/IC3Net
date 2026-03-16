@@ -14,7 +14,7 @@ module load Miniforge3/24.1.2-0
 eval "$(${EBROOTMINIFORGE3}/bin/conda shell.bash hook)" 
 source "${EBROOTMINIFORGE3}/etc/profile.d/mamba.sh"
 
-CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/${USER}_ic3_conda_env" 
+CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3" 
 export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs" 
 
 # Create environment with Python first
@@ -49,6 +49,5 @@ pip install \
   visdom==0.1.4
 
 # Install IC3Net environments
-git clone https://github.com/IC3Net/IC3Net
-cd IC3Net/ic3net-envs
+cd ic3net-envs
 python setup.py develop
