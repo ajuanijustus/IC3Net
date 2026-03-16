@@ -33,7 +33,7 @@ mamba install --yes \
 
 
 # Install pip packages
-pip install /rds/projects/b/baberc-human-agent-teaming/Aju/ic3/torch-0.4.0-cp36-cp36m-linux_x86_64.whl
+pip install /rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/torch-0.4.0-cp36-cp36m-linux_x86_64.whl
 
 pip install \
   charset-normalizer==2.0.12 \
