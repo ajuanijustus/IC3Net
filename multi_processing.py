@@ -2,7 +2,6 @@ import time
 from utils import *
 import torch
 import torch.multiprocessing as mp
-mp.set_start_method('spawn', force=True)
 
 class MultiProcessWorker(mp.Process):
     # TODO: Make environment init threadsafe
