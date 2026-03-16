@@ -52,6 +52,7 @@ class MultiProcessTrainer(object):
             self.comms.append(comm)
             worker = MultiProcessWorker(i, trainer_maker, comm_remote, seed=args.seed)
             worker.start()
+            time.sleep(1)
             print("[Trainer] workers started")
         print("[Trainer] done creating workers")
         self.grads = None
