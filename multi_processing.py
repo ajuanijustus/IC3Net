@@ -7,11 +7,13 @@ mp.set_start_method('spawn', force=True)
 class MultiProcessWorker(mp.Process):
     # TODO: Make environment init threadsafe
     def __init__(self, id, trainer_maker, comm, seed, *args, **kwargs):
+        print(f"[Worker {id}] __init__ start")
         self.id = id
         self.seed = seed
         super(MultiProcessWorker, self).__init__()
         self.trainer = trainer_maker()
         self.comm = comm
+        print(f"[Worker {id}] __init__ done")
 
     def run(self):
         torch.manual_seed(self.seed + self.id + 1)
@@ -41,6 +43,7 @@ class MultiProcessWorker(mp.Process):
 
 class MultiProcessTrainer(object):
     def __init__(self, args, trainer_maker):
+        print("[Trainer] __init__ start")
         self.comms = []
         self.trainer = trainer_maker()
         # itself will do the same job as workers
@@ -53,6 +56,7 @@ class MultiProcessTrainer(object):
         self.grads = None
         self.worker_grads = None
         self.is_random = args.random
+        print("[Trainer] __init__ done")
 
     def quit(self):
         for comm in self.comms:
