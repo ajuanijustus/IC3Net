@@ -15,14 +15,14 @@ class MultiProcessWorker(mp.Process):
         print(f"[Worker {id}] __init__ done")
 
     def run(self):
-        # print(f"[Worker {self.id}] ENTERED RUN", flush=True)
+        print(f"[Worker {self.id}] ENTERED RUN", flush=True)
         torch.manual_seed(self.seed + self.id + 1)
         np.random.seed(self.seed + self.id + 1)
 
         while True:
-            # print(f"[Worker {self.id}] waiting for task", flush=True)
+            print(f"[Worker {self.id}] waiting for task", flush=True)
             task = self.comm.recv()
-            # print(f"[Worker {self.id}] got first task: {task}", flush=True)
+            print(f"[Worker {self.id}] got first task: {task}", flush=True)
             if type(task) == list:
                 task, epoch = task
 

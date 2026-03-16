@@ -233,7 +233,7 @@ def run(num_epochs):
 
         print('Epoch {}\tReward {}\tTime {:.2f}s'.format(
                 epoch, stat['reward'], epoch_time
-        ))
+        ), flush=True)
 
         if 'enemy_reward' in stat.keys():
             print('Enemy-Reward: {}'.format(stat['enemy_reward']))
