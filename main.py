@@ -173,12 +173,15 @@ if not args.display:
     display_models([policy_net])
 
 # share parameters among threads, but not gradients
+print('Sharing parameters among threads, but not gradients.')
 for p in policy_net.parameters():
     p.data.share_memory_()
 
 if args.nprocesses > 1:
+    print('Initialising MultiProcessTrainer.')
     trainer = MultiProcessTrainer(args, lambda: Trainer(args, policy_net, data.init(args.env_name, args)))
 else:
+    print('Initialising Trainer.')
     trainer = Trainer(args, policy_net, data.init(args.env_name, args))
 
 disp_trainer = Trainer(args, policy_net, data.init(args.env_name, args, False))
@@ -201,6 +204,8 @@ log['entropy'] = LogField(list(), True, 'epoch', 'num_steps')
 
 if args.plot:
     vis = visdom.Visdom(env=args.plot_env)
+
+print('`Initialisations complete.')
 
 def run(num_epochs):
     print('Starting training interation.')
