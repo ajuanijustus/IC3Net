@@ -205,7 +205,7 @@ log['entropy'] = LogField(list(), True, 'epoch', 'num_steps')
 if args.plot:
     vis = visdom.Visdom(env=args.plot_env)
 
-print('`Initialisations complete.')
+print('Initialisations complete.')
 
 def run(num_epochs):
     print('Starting training interation.')

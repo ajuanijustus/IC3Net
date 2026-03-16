@@ -3,9 +3,10 @@
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
 
-#SBATCH --time 0-00:59:59  # days-hours:minutes:seconds
-#SBATCH --nodes 1
-#SBATCH --ntasks 16
+#SBATCH --time=0-00:59:59  # days-hours:minutes:seconds
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=16
 
 #SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.out
 #SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.err
