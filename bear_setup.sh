@@ -4,6 +4,9 @@
 #SBATCH --qos=bbshort
 #SBATCH --time 0-00:5:00  # days-hours:minutes:seconds
 
+#SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.out
+#SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.err
+
 set -e
 
 module purge; module load bluebear
