@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #SBATCH --account=baberc-human-agent-teaming
-#SBATCH --qos=bbshort
+#SBATCH --qos=bbdefault
 
-#SBATCH --time=0-00:05:00  # days-hours:minutes:seconds
+#SBATCH --time=0-01:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
