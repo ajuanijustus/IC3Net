@@ -20,7 +20,9 @@ class MultiProcessWorker(mp.Process):
         np.random.seed(self.seed + self.id + 1)
 
         while True:
+            print(f"[Worker {self.id}] waiting for task", flush=True)
             task = self.comm.recv()
+            print(f"[Worker {self.id}] got first task: {task}", flush=True)
             if type(task) == list:
                 task, epoch = task
 
@@ -45,7 +47,6 @@ class MultiProcessTrainer(object):
     def __init__(self, args, trainer_maker):
         print("[Trainer] __init__ start")
         self.comms = []
-        self.trainer = trainer_maker()
         # itself will do the same job as workers
         self.nworkers = args.nprocesses - 1
         for i in range(self.nworkers):
@@ -53,9 +54,9 @@ class MultiProcessTrainer(object):
             self.comms.append(comm)
             worker = MultiProcessWorker(i, trainer_maker, comm_remote, seed=args.seed)
             worker.start()
-            time.sleep(1)
             print("[Trainer] workers started")
         print("[Trainer] done creating workers")
+        self.trainer = trainer_maker()
         self.grads = None
         self.worker_grads = None
         self.is_random = args.random
