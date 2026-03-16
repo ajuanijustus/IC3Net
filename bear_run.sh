@@ -30,7 +30,7 @@ mamba activate "${CONDA_ENV_PATH}"
 python -c "print('hello world')"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models/"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models"
 mkdir -p "${SAVE_DIR}"
 
 # Optional: timestamped run name

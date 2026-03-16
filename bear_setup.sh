@@ -47,3 +47,8 @@ pip install \
   tornado==6.1 \
   urllib3==1.26.20 \
   visdom==0.1.4
+
+# Install IC3Net environments
+git clone https://github.com/IC3Net/IC3Net
+cd IC3Net/ic3net-envs
+python setup.py develop
