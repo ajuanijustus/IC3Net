@@ -160,7 +160,6 @@ torch.manual_seed(args.seed)
 
 print(args)
 
-
 if args.commnet:
     policy_net = CommNetMLP(args, num_inputs)
 elif args.random:
