@@ -5,7 +5,7 @@
 
 #SBATCH --time=0-01:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
-#SBATCH --ntasks=16
+#SBATCH --ntasks=32
 #SBATCH --cpus-per-task=1
 
 #SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.out
@@ -28,7 +28,7 @@ export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs"
 mamba activate "${CONDA_ENV_PATH}"
 
 # Test within the environment
-python -c "print('hello world')"
+# python -c "print('hello world')"
 
 # Define save directory
 SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models"
@@ -41,12 +41,10 @@ SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
 echo "Saving to: ${SAVE_PATH}"
 
 # Run training
-ulimit -n
-
 python main.py \
   --env_name traffic_junction \
   --nagents 5 \
-  --nprocesses 8 \
+  --nprocesses 32 \
   --num_epochs 2000 \
   --hid_size 128 \
   --detach_gap 10 \
