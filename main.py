@@ -3,15 +3,8 @@ import time
 import signal
 import argparse
 
-import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-
 import numpy as np
 import torch
-torch.set_num_threads(1)
 import visdom
 import data
 from models import *
