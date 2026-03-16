@@ -15,6 +15,7 @@ class MultiProcessWorker(mp.Process):
         print(f"[Worker {id}] __init__ done")
 
     def run(self):
+        print(f"[Worker {self.id}] ENTERED RUN", flush=True)
         torch.manual_seed(self.seed + self.id + 1)
         np.random.seed(self.seed + self.id + 1)
 
