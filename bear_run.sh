@@ -41,10 +41,12 @@ SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
 echo "Saving to: ${SAVE_PATH}"
 
 # Run training
+ulimit -n
+
 python main.py \
   --env_name traffic_junction \
   --nagents 5 \
-  --nprocesses 16 \
+  --nprocesses 8 \
   --num_epochs 2000 \
   --hid_size 128 \
   --detach_gap 10 \
