@@ -45,7 +45,6 @@ pip install \
   pyzmq==25.1.2 \
   requests==2.27.1 \
   six==1.17.0 \
-  torch==0.4.1 \
   tornado==6.1 \
   urllib3==1.26.20 \
   visdom==0.1.4
