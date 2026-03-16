@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --account=baberc-human-agent-teaming
-#SBATCH --qos=bbdefault
+#SBATCH --qos=bbshort
 
 #SBATCH --time=0-00:05:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
