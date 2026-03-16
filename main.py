@@ -12,14 +12,7 @@ from comm import CommNetMLP
 from utils import *
 from action_utils import parse_action_args
 from trainer import Trainer
-
 from multi_processing import MultiProcessTrainer
-import torch.multiprocessing as mp
-mp.set_start_method('spawn', force=True)
-
-import os
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
 
 torch.utils.backcompat.broadcast_warning.enabled = True
 torch.utils.backcompat.keepdim_warning.enabled = True

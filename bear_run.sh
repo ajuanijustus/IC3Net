@@ -44,7 +44,7 @@ echo "Saving to: ${SAVE_PATH}"
 python main.py \
   --env_name traffic_junction \
   --nagents 5 \
-  --nprocesses 16 \
+  --nprocesses 1 \
   --num_epochs 2000 \
   --hid_size 128 \
   --detach_gap 10 \
