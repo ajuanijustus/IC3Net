@@ -3,15 +3,15 @@
 #SBATCH --array=0-3
 
 #SBATCH --account=baberc-human-agent-teaming
-#SBATCH --qos=bbshort
+#SBATCH --qos=bbdefault
 
-#SBATCH --time=0-00:05:00  # days-hours:minutes:seconds
+#SBATCH --time=0-10:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
 
-#SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.out
-#SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.err
+#SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%A_%a.out
+#SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%A_%a.err
 
 set -e
 
@@ -56,7 +56,16 @@ SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
 echo "Run name: ${RUN_NAME}"
 echo "Config: ${CONFIG}"
 
+# Custom logging setup
+LOG_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/${RUN_NAME}"
+mkdir -p "${LOG_DIR}"
+
+LOG_FILE="${LOG_DIR}/stdout.log"
+ERR_FILE="${LOG_DIR}/stderr.log"
+
+exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERR_FILE" >&2)
+
 # Run training
 python main.py ${CONFIG} \
   --save "${SAVE_PATH}" \
-  --save_every 250
+  --save_every 500
