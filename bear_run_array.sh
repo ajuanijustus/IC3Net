@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --array=0-3
+#SBATCH --array=0-23
 
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
