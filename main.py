@@ -60,7 +60,7 @@ parser.add_argument('--nactions', default='1', type=str,
 parser.add_argument('--action_scale', default=1.0, type=float,
                     help='scale action output from model')
 # other
-parser.add_argument('--plot', action='store_true', default=False,
+parser.add_argument('--plot', action='store_true', default=True,
                     help='plot training progress')
 parser.add_argument('--plot_env', default='main', type=str,
                     help='plot env name')

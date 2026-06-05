@@ -62,8 +62,8 @@ if ! brew list sdl2 &>/dev/null; then
     brew install sdl2
 fi
 
-export CFLAGS="-I$APPS_DIR/include -I$(brew --prefix sdl2)/include/SDL2:$CFLAGS"
-export LDFLAGS="-L$APPS_DIR/lib -L$(brew --prefix sdl2)/lib:$LDFLAGS"
+export CFLAGS="-I$APPS_DIR/include -I$(brew --prefix sdl2)/include/SDL2"
+export LDFLAGS="-L$APPS_DIR/lib -L$(brew --prefix sdl2)/lib"
 export LD_LIBRARY_PATH="$APPS_DIR/lib:$(brew --prefix sdl2)/lib:$LD_LIBRARY_PATH"
 export PKG_CONFIG_PATH="$APPS_DIR/lib/pkgconfig:$(brew --prefix sdl2)/lib/pkgconfig:$PKG_CONFIG_PATH"
 export DYLD_LIBRARY_PATH="$APPS_DIR/lib:$DYLD_LIBRARY_PATH"
@@ -91,20 +91,30 @@ cd BWEnv
 mkdir -p build && cd build
 
 CC=gcc CXX=g++ \
-CXXFLAGS="-I$APPS_DIR/include" \
-LDFLAGS="-L$APPS_DIR/lib -L$(brew --prefix sdl2)/lib" \
+CXXFLAGS="-I$APPS_DIR/include -I$(brew --prefix sdl2)/include -I$(brew --prefix zeromq)/include" \
+LDFLAGS="-L$APPS_DIR/lib -L$(brew --prefix sdl2)/lib -L$(brew --prefix zeromq)/lib" \
+cmake .. \
+  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+  -DBWAPI_DIR=../../bwapi/ \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+make -j
+
+ZMQ_PREFIX=$(brew --prefix zeromq)
+SDL_PREFIX=$(brew --prefix sdl2)
+BWAPI_LIB=../../bwapi/lib
+
 cmake .. \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
   -DBWAPI_DIR=../../bwapi/ \
   -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-  -DZMQ_LIBRARIES="$APPS_DIR/lib/libzmq.dylib" \
-  -DZMQ_INCLUDE_DIR="$APPS_DIR/include"
-make -j$(sysctl -n hw.ncpu)
+  -DCMAKE_C_FLAGS="-arch x86_64 -I$ZMQ_PREFIX/include -I$SDL_PREFIX/include" \
+  -DCMAKE_CXX_FLAGS="-arch x86_64 -I$ZMQ_PREFIX/include -I$SDL_PREFIX/include" \
+  -DCMAKE_SHARED_LINKER_FLAGS="-arch x86_64 -L$ZMQ_PREFIX/lib -lzmq -L$SDL_PREFIX/lib -lSDL2 -L$BWAPI_LIB -lBWAPILIB"
 
 cd ../..
 
 echo "Installing Python bindings..."
-pip install pybind11
+pip install "pybind11<=2.6"
 
 LDFLAGS="-L$APPS_DIR/lib -L$(brew --prefix sdl2)/lib" \
 CFLAGS="-I$APPS_DIR/include -I$(brew --prefix sdl2)/include/SDL2" \
