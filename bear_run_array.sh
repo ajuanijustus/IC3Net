@@ -33,28 +33,33 @@ mamba activate "${CONDA_ENV_PATH}"
 # python -c "print('hello world')"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_3"
 mkdir -p "${SAVE_DIR}"
 
-CONFIG=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" bear_config.txt)
+# Read raw config line
+RAW_CONFIG=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" bear_config.txt)
 
-# Extract key fields
-ENV=$(echo "$CONFIG" | grep -oP '(?<=--env_name )\S+')
-MODEL=$(echo "$CONFIG" | grep -oP '(--ic3net|--commnet|--mean_ratio 0)' | head -n1)
-DIFF=$(echo "$CONFIG" | grep -oP '(?<=--difficulty )\S+' || echo "na")
+# 1. Extract metadata for the RUN_NAME
+ENV=$(echo "$RAW_CONFIG" | grep -oP '(?<=--env_name )\S+')
+MODEL=$(echo "$RAW_CONFIG" | grep -oP '(--ic3net|--commnet|--mean_ratio 0)' | head -n1)
+DIFF=$(echo "$RAW_CONFIG" | grep -oP '(?<=--difficulty )\S+' || echo "na")
 
-# Clean model name
+# Clean model name string
 if [[ "$MODEL" == "--ic3net" ]]; then MODEL="ic3net"; fi
 if [[ "$MODEL" == "--commnet" ]]; then MODEL="commnet"; fi
 if [[ "$MODEL" == "--mean_ratio 0" ]]; then MODEL="iric"; fi
 if [[ -z "$MODEL" ]]; then MODEL="ic"; fi
 
-# Create readable run name
-RUN_NAME="${ENV}_${MODEL}_${DIFF}_job${SLURM_ARRAY_TASK_ID}_$(date +%Y%m%d_%H%M%S)"
+# 2. Clean the config string sent to Python (Strip out the difficulty flag if present)
+CLEANED_CONFIG=$(echo "$RAW_CONFIG" | sed -E 's/--difficulty [^ ]+//g')
+
+# 3. Create a clean base run name
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+RUN_NAME="${ENV}_${MODEL}_${DIFF}_job${SLURM_ARRAY_TASK_ID}_${TIMESTAMP}"
 SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
 
 echo "Run name: ${RUN_NAME}"
-echo "Config: ${CONFIG}"
+echo "Executing with Cleaned Config: ${CLEANED_CONFIG}"
 
 # Custom logging setup
 LOG_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/${RUN_NAME}"
@@ -65,7 +70,15 @@ ERR_FILE="${LOG_DIR}/stderr.log"
 
 exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERR_FILE" >&2)
 
-# Run training
-python main.py ${CONFIG} \
+# 4. Run training using the safe configuration parameters
+python main.py ${CLEANED_CONFIG} \
   --save "${SAVE_PATH}" \
   --save_every 500
+
+# 5. Hotfix for checkpoint tracking:
+# Since main.py saves the final output without an epoch suffix, 
+# create a symlink or copy it so our plotting regex detects it seamlessly as the 1500 landmark.
+if [ -f "${SAVE_PATH}" ]; then
+    cp "${SAVE_PATH}" "${SAVE_PATH}_1500"
+    echo "Created explicit _1500 target copy for replication plotting."
+fi
