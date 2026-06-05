@@ -1,4 +1,5 @@
 trained_models/
+trained_models_*/
 plots/
 
 # Byte-compiled / optimized / DLL files
