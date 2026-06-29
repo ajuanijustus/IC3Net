@@ -193,3 +193,11 @@ python -u main.py --env_name starcraft --task_type combat --nagents 10 --num_epo
 ## License
 
 Code is available under MIT license.
+
+Phase 2: 
+single trainer runs:
+python main.py --env_name predator_prey --nagents 3 --nprocesses 1 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 2 --save "trained_models/phase2" --save_every 500
+
+python main.py --env_name predator_prey --nagents 3 --nprocesses 1 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 3 --save "trained_models/phase3" --save_every 500
+
+python main.py --env_name predator_prey --nagents 3 --nprocesses 4 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 4 --save "trained_models/phase4" --save_every 500

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # ==========================================
 # CONFIGURATION
 # ==========================================
-MODELS_DIR = "trained_models"
+MODELS_DIR = "trained_models_3" 
 SAVE_DIR = "plots"
 
 # Adjusted keys to match the paper's internal LogField dictionary definitions
@@ -36,11 +36,7 @@ checkpoint_1500_pattern = re.compile(
     r"job\d+_\d+_\d+_1500$" 
 )
 
-# ==========================================
-# 1. PARSE AND GROUP MODEL PATHS
-# ==========================================
 dataset = {}
-
 for item in os.listdir(MODELS_DIR):
     match = checkpoint_1500_pattern.match(item)
     if match:
@@ -49,6 +45,26 @@ for item in os.listdir(MODELS_DIR):
         full_path = os.path.join(MODELS_DIR, item)
         
         dataset.setdefault(env, {}).setdefault(diff, {}).setdefault(algo, []).append(full_path)
+
+# ==================================================================================
+# 1. PARSE AND GROUP MODEL PATHS
+dataset = {}
+
+manual_env  = "phase2_predator_prey"       # Options: 'predator_prey' or 'traffic_junction'
+manual_algo = "wip"                 # Options: 'ic3net', 'commnet', 'iric', 'ic'
+manual_diff = "easy"                # Options: 'na', 'easy', 'medium', 'hard'
+manual_path = "trained_models/phase2_1000" 
+# --------------------------------------------------
+
+# Reconstruct the exact dictionary hierarchy the downstream loop expects
+dataset = {
+    manual_env: {
+        manual_diff: {
+            manual_algo: [manual_path]
+        }
+    }
+}
+# ==================================================================================
 
 print(f"Found {sum(len(paths) for env in dataset.values() for diff in env.values() for paths in diff.values())} checkpoints at epoch 1500.")
 

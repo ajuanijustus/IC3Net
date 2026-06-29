@@ -8,10 +8,11 @@ import torch
 import visdom
 import data
 from models import *
-from comm_2 import CommNetMLP
+from comm import CommNetMLP
+from comm_gumbel import CommNetMLPGumbel
 from utils import *
 from action_utils import parse_action_args
-from trainer_2 import Trainer
+from trainer_gumbel import Trainer
 from multi_processing import MultiProcessTrainer
 
 torch.utils.backcompat.broadcast_warning.enabled = True
@@ -108,9 +109,17 @@ parser.add_argument('--advantages_per_action', default=False, action='store_true
 parser.add_argument('--share_weights', default=False, action='store_true',
                     help='Share weights for hops')
 
-# Development
-parser.add_argument('--phase', type=int, default=1, choices=[1, 2, 3, 4],
-                    help="Ablation phase: 1=Vanilla, 2=Decoupled Binary, 3=Matrix Routing, 4=Representation Split")
+# --- NEW MODIFICATION: Added CLI arguments config for Decoupled Gumbel Communication ---
+parser.add_argument('--use_gumbel_comm', action='store_true', default=False,
+                    help="Enable the decoupled policy network with discrete Gumbel-Softmax language")
+parser.add_argument('--vocab_size', type=int, default=10,
+                    help="The vocabulary size V (number of discrete unique words/tokens available)")
+parser.add_argument('--num_tokens', type=int, default=3,
+                    help="Number of independent token heads/words an agent outputs to make a message phrase")
+parser.add_argument('--gumbel_tau', type=float, default=1.0,
+                    help="The temperature parameter controlling the exploration softness of Gumbel selection")
+parser.add_argument('--token_penalty', type=float, default=0.00,
+                    help="Sparsity cost multiplier targeting tokens > 0, forcing agents to compress message fields")
 
 
 init_args_for_env(parser)
@@ -145,18 +154,16 @@ args.dim_actions = env.dim_actions
 args.num_inputs = num_inputs
 
 # Hard attention
-if args.hard_attn and args.commnet:
-    if args.phase in [3, 4]:
-        # Both Phase 3 and Phase 4 utilize the N x N targeted matrix routing architecture
-        args.num_actions = [*args.num_actions, *([2] * args.nagents)]
-        args.dim_actions = env.dim_actions + args.nagents
-    else:
-        # Original (and Phase 2) implementation: Each agent has a single binary head for communication
-        args.num_actions = [*args.num_actions, 2]
-        args.dim_actions = env.dim_actions + 1
+# NOTE: Gumbel-Softmax approach decouples the action spaces completely.
+# It uses an internal vocabulary rather than packing communication choice directly into the environment action heads.
+if args.hard_attn and args.commnet and not args.use_gumbel_comm:
+    # add comm_action as last dim in actions
+    args.num_actions = [*args.num_actions, 2]
+    args.dim_actions = env.dim_actions + 1
 
-# Recurrence
-if args.commnet and (args.recurrent or args.rnn_type == 'LSTM'):
+# Recurrence configuration sync
+# --- NEW MODIFICATION: Enforce recurrent tracking settings if Gumbel is activated with recurrence ---
+if (args.commnet or args.use_gumbel_comm) and (args.recurrent or args.rnn_type == 'LSTM'):
     args.recurrent = True
     args.rnn_type = 'LSTM'
 
@@ -169,7 +176,11 @@ torch.manual_seed(args.seed)
 
 print(args)
 
-if args.commnet:
+# --- NEW MODIFICATION: Conditionally initialize the target network based on the CLI arguments flag ---
+if args.use_gumbel_comm:
+    print("Initializing Decoupled Gumbel-Softmax Policy Network (CommNetMLPGumbel)")
+    policy_net = CommNetMLPGumbel(args, num_inputs)
+elif args.commnet:
     policy_net = CommNetMLP(args, num_inputs)
 elif args.random:
     policy_net = Random(args, num_inputs)
@@ -210,6 +221,11 @@ log['enemy_comm'] = LogField(list(), True, 'epoch', 'num_steps')
 log['value_loss'] = LogField(list(), True, 'epoch', 'num_steps')
 log['action_loss'] = LogField(list(), True, 'epoch', 'num_steps')
 log['entropy'] = LogField(list(), True, 'epoch', 'num_steps')
+
+# --- NEW MODIFICATION: Registered logging categories tracking optimized metrics for the CommPolicy branch ---
+log['comm_action_loss'] = LogField(list(), True, 'epoch', 'num_steps')
+log['comm_value_loss'] = LogField(list(), True, 'epoch', 'num_steps')
+log['token_penalty'] = LogField(list(), True, 'epoch', 'num_steps')
 
 if args.plot:
     vis = visdom.Visdom(env=args.plot_env)
@@ -256,6 +272,14 @@ def run(num_epochs):
             print('Comm-Action: {}'.format(stat['comm_action']))
         if 'enemy_comm' in stat.keys():
             print('Enemy-Comm: {}'.format(stat['enemy_comm']))
+            
+        # --- NEW MODIFICATION: Detailed metric prints tracking language evolution progress ---
+        if 'comm_action_loss' in stat.keys():
+            print('Comm-Action-Loss: {:.4f}'.format(stat['comm_action_loss']))
+        if 'comm_value_loss' in stat.keys():
+            print('Comm-Value-Loss: {:.4f}'.format(stat['comm_value_loss']))
+        if 'token_penalty' in stat.keys():
+            print('Token-Penalty-Loss: {:.4f}'.format(stat['token_penalty']))
 
         if args.plot:
             for k, v in log.items():
