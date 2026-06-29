@@ -10,29 +10,23 @@ import matplotlib.pyplot as plt
 MODELS_DIR = "trained_models_3" 
 SAVE_DIR = "plots"
 
-# Adjusted keys to match the paper's internal LogField dictionary definitions
-KEY_MAPPING = {
-    'success': 'success',
-    'reward': 'reward',
-    'steps': 'steps_taken'  
-}
-
-# The original paper's color schema mapping
+# Added distinct colors for each phase line
 ALGO_COLORS = {
     'commnet': '#5785c1',      # Blue
-    'semi-commnet': '#dc8d6d', # Peach/Orange (Mapped to ic3net/iric variants if needed)
-    'ic3net': '#dc8d6d',       # Matching paper alternative
+    'ic3net': '#dc8d6d',       # Peach/Orange
     'iric': '#78b38a',         # Green
-    'ic': '#ba71af'            # Purple/Pink (MLP baseline)
+    'ic': '#ba71af',           # Purple
+    'phase2': '#e6b800',       # Gold/Yellow
+    'phase3': '#df5454',       # Coral Red
+    'phase4': '#a366ff'        # Lavender
 }
 
-os.makedirs(SAVE_DIR, exist_ok=True)
-
-# Strictly match only the 1500-epoch milestone checkpoints
+# Unified Regex: Parses standard baselines AND safely handles optional phase injection
 checkpoint_1500_pattern = re.compile(
     r"^(?P<env>predator_prey|traffic_junction)_"
     r"(?P<algo>ic3net|commnet|iric|ic)_"
     r"(?P<diff>na|easy|medium|hard)_"
+    r"(?:phase(?P<phase>\d+)_)?"  # Optional phase-capture group
     r"job\d+_\d+_\d+_1500$" 
 )
 
@@ -41,29 +35,34 @@ for item in os.listdir(MODELS_DIR):
     match = checkpoint_1500_pattern.match(item)
     if match:
         meta = match.groupdict()
-        env, algo, diff = meta['env'], meta['algo'], meta['diff']
+        env, algo, diff, phase = meta['env'], meta['algo'], meta['diff'], meta['phase']
         full_path = os.path.join(MODELS_DIR, item)
+        
+        # TREAT PHASES AS DIFFERENT ALGORITHMS
+        # If a phase exists, overwrite the algorithm name so it plots as its own line
+        if phase:
+            algo = f"phase{phase}"
         
         dataset.setdefault(env, {}).setdefault(diff, {}).setdefault(algo, []).append(full_path)
 
 # ==================================================================================
-# 1. PARSE AND GROUP MODEL PATHS
-dataset = {}
+# MANUAL PARSE AND GROUP MODEL PATHS
+# dataset = {}
 
-manual_env  = "phase2_predator_prey"       # Options: 'predator_prey' or 'traffic_junction'
-manual_algo = "wip"                 # Options: 'ic3net', 'commnet', 'iric', 'ic'
-manual_diff = "easy"                # Options: 'na', 'easy', 'medium', 'hard'
-manual_path = "trained_models/phase2_1000" 
-# --------------------------------------------------
+# manual_env  = "phase2_predator_prey"    # Options: 'predator_prey' or 'traffic_junction'
+# manual_algo = "wip"                     # Options: 'ic3net', 'commnet', 'iric', 'ic'
+# manual_diff = "easy"                    # Options: 'na', 'easy', 'medium', 'hard'
+# manual_path = "trained_models/phase2_1000" 
+# # --------------------------------------------------
 
-# Reconstruct the exact dictionary hierarchy the downstream loop expects
-dataset = {
-    manual_env: {
-        manual_diff: {
-            manual_algo: [manual_path]
-        }
-    }
-}
+# # Reconstruct the exact dictionary hierarchy the downstream loop expects
+# dataset = {
+#     manual_env: {
+#         manual_diff: {
+#             manual_algo: [manual_path]
+#         }
+#     }
+# }
 # ==================================================================================
 
 print(f"Found {sum(len(paths) for env in dataset.values() for diff in env.values() for paths in diff.values())} checkpoints at epoch 1500.")
