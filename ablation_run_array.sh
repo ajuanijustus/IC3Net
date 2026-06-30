@@ -1,11 +1,11 @@
 #!/bin/bash
 
-#SBATCH --array=0-8
+#SBATCH --array=0-17
 
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
 
-#SBATCH --time=2-00:00:00  # days-hours:minutes:seconds
+#SBATCH --time=0-10:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
@@ -30,7 +30,7 @@ export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs"
 mamba activate "${CONDA_ENV_PATH}"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_abl_1"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_3"
 mkdir -p "${SAVE_DIR}"
 
 # Read raw config line from the ablation config file
@@ -51,7 +51,7 @@ if [[ -z "$MODEL" ]]; then MODEL="ic"; fi
 # 2. Clean the config string sent to Python (Strip out the difficulty flag if present)
 CLEANED_CONFIG=$(echo "$RAW_CONFIG" | sed -E 's/--difficulty [^ ]+//g')
 
-# 3. Create a clean base run name (Includes phase explicitly for plotting extraction)
+# 3. Create a clean base run name
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 RUN_NAME="${ENV}_${MODEL}_${DIFF}_phase${PHASE}_job${SLURM_ARRAY_TASK_ID}_${TIMESTAMP}"
 SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
