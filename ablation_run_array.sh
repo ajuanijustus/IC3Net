@@ -30,7 +30,7 @@ export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs"
 mamba activate "${CONDA_ENV_PATH}"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_3"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_abl_1"
 mkdir -p "${SAVE_DIR}"
 
 # Read raw config line from the ablation config file
