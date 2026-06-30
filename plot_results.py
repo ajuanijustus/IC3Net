@@ -7,8 +7,14 @@ import matplotlib.pyplot as plt
 # ==========================================
 # CONFIGURATION
 # ==========================================
-MODELS_DIR = "trained_models_3" 
+MODELS_DIR = "trained_models_4" 
 SAVE_DIR = "plots"
+
+KEY_MAPPING = {
+    'success': 'success',
+    'reward': 'reward',
+    'steps': 'steps_taken'  
+}
 
 # Added distinct colors for each phase line
 ALGO_COLORS = {
@@ -195,7 +201,7 @@ for env, diff_dict in dataset.items():
             diff_title = diff.upper() if diff == 'na' else diff.title()
             plt.suptitle(f"Replicated Paper Results: {env_title} ({diff_title})", fontsize=16, fontweight='bold', y=1.02)
             
-            save_filename = f"{env}_{diff}_replicated_metrics.png"
+            save_filename = f"ablation_{env}_{diff}_replicated_metrics.png"
             save_path = os.path.join(SAVE_DIR, save_filename)
             plt.tight_layout()
             plt.savefig(save_path, bbox_inches='tight', dpi=200)
