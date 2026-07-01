@@ -5,7 +5,7 @@
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
 
-#SBATCH --time=0-10:00:00  # days-hours:minutes:seconds
+#SBATCH --time=2-00:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
@@ -30,7 +30,7 @@ export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs"
 mamba activate "${CONDA_ENV_PATH}"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_abl_1"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_abl_2"
 mkdir -p "${SAVE_DIR}"
 
 # Read raw config line from the ablation config file
