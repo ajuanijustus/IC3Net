@@ -140,20 +140,13 @@ class CommNetMLP(nn.Module):
         comm_c, env_c = prev_cell.chunk(2, dim=-1)
         num_agents_alive, agent_mask = self.get_agent_mask(batch_size, info)
 
-        # ------------------------------------------
-        # 1. ENCODING PIPELINE STEP
-        # ------------------------------------------
+        # 1. ENCODING PIPELINE STEP (COMMUNICATION)
         if self.args.phase == 4:
             x_comm_encoded = self.comm_encoder(x)
         else:
             x_comm_encoded = self.encoder(x)
 
-        # ------------------------------------------
-        # 2. COMMUNICATION BRANCH PROCESSING
-        # ------------------------------------------
-        comm_inp_flat = x_comm_encoded.view(batch_size * n, self.hid_size)
-        comm_h, comm_c = self.comm_f_module(comm_inp_flat, (comm_h, comm_c))
-        
+        # 2. GATING / ROUTING DECISION (Based on incoming time-step state)
         if self.args.phase == 2:
             comm_logits = F.log_softmax(self.comm_head(comm_h), dim=-1)
             rng_state = torch.get_rng_state()
@@ -179,11 +172,11 @@ class CommNetMLP(nn.Module):
                 agent_mask = agent_mask * comm_action_mask.double()
 
         agent_mask_transpose = agent_mask.transpose(1, 2)
-        hidden_state = comm_h
         
-        # Message Passing Routine Loop
+        # 3. DYNAMIC MULTI-PASS MESSAGE PROPAGATION LOOP
+        # Both comm_h and comm_c evolve at each pass as messages flow
         for i in range(self.comm_passes):
-            comm = hidden_state.view(batch_size, n, self.hid_size)
+            comm = comm_h.view(batch_size, n, self.hid_size)
             comm = comm.unsqueeze(-2).expand(-1, n, n, self.hid_size)
             mask = self.comm_mask.view(1, n, n).expand(comm.shape[0], n, n).unsqueeze(-1)
             comm = comm * mask
@@ -195,15 +188,18 @@ class CommNetMLP(nn.Module):
             comm_sum = comm.sum(dim=1)
             c = self.C_modules[i](comm_sum)
 
-        # ------------------------------------------
-        # 3. ENVIRONMENT BRANCH PROCESSING
-        # ------------------------------------------
+            # UPDATE STEP: Evolve the communication representations with the new messages
+            comm_inp = x_comm_encoded + c
+            comm_inp_flat = comm_inp.view(batch_size * n, self.hid_size)
+            comm_h, comm_c = self.comm_f_module(comm_inp_flat, (comm_h, comm_c))
+
+        # 4. ENVIRONMENT BRANCH PROCESSING
         if self.args.phase == 4:
             x_env_encoded = self.env_encoder(x)
         else:
             x_env_encoded = self.encoder(x)
 
-        # Combine isolated or shared observation encoder tensor with incoming message payload
+        # The environment branch integrates the final message payload consensus 'c'
         env_inp = x_env_encoded + c
         env_inp_flat = env_inp.view(batch_size * n, self.hid_size)
         env_h, env_c = self.env_f_module(env_inp_flat, (env_h, env_c))

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 # ==========================================
 # CONFIGURATION
 # ==========================================
-MODELS_DIR = "trained_models_4" 
+MODELS_DIR = "trained_models_abl_3" 
 SAVE_DIR = "plots"
 
 KEY_MAPPING = {
