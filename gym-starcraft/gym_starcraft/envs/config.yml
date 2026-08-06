@@ -1,10 +1,21 @@
+# options:
+#   OPENBW_ENABLE_UI: 0
+#   # You may override this through command line environment options
+#   # BWAPI_INSTALL_PREFIX: ~/Public/bwapi
+#   BWAPI_INSTALL_PREFIX: ~/Documents/Tech/Torchcraft/bwapi
+#   # Replace with your own starcraft map
+#   BWAPI_CONFIG_AUTO_MENU__MAP: ../gym-starcraft/maps/micro-empty.scm
+  
+#   # BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.so
+#   BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.dylib # For mac replace with this
 options:
   OPENBW_ENABLE_UI: 0
-  # You may override this through command line environment options
-  # BWAPI_INSTALL_PREFIX: ~/Public/bwapi
-  BWAPI_INSTALL_PREFIX: ~/Documents/ic3_torchcraft/bwapi
-  # Replace with your own starcraft map
-  BWAPI_CONFIG_AUTO_MENU__MAP: ../gym-starcraft/maps/micro-empty.scm
   
-  # BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.so
-  BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.dylib # For mac replace with this
+  # Point to the directory containing bin/BWAPILauncher (bwapi_install)
+  BWAPI_INSTALL_PREFIX: /Users/ajuanijustus/Documents/Tech/TorchCraft/bwapi_install
+  
+  # Absolute map path
+  BWAPI_CONFIG_AUTO_MENU__MAP: /Users/ajuanijustus/Documents/Tech/IC3Net/gym-starcraft/maps/micro-empty.scm
+
+  # Point directly to compiled BWEnv.dylib
+  BWAPI_CONFIG_AI__AI: /Users/ajuanijustus/Documents/Tech/TorchCraft/BWEnv/build/BWEnv.dylib

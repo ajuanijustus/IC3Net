@@ -33,7 +33,9 @@ class StarCraftBaseEnv(gym.Env):
         self.action_space = self._action_space()
         self.observation_space = self._observation_space()
 
-        self.config_path = config_path
+        # self.config_path = config_path # original
+        self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yml') # aju
+
         self.torchcraft_dir = torchcraft_dir
 
 

@@ -1,3 +1,16 @@
+import ctypes, sys, os
+
+# Force load ZeroMQ with global symbol visibility for dynamic extensions
+try:
+    # Try Conda environment libzmq first
+    ctypes.CDLL(os.path.join(sys.prefix, "lib", "libzmq.dylib"), mode=ctypes.RTLD_GLOBAL)
+except OSError:
+    try:
+        # Fallback to Homebrew libzmq
+        ctypes.CDLL("/opt/homebrew/lib/libzmq.dylib", mode=ctypes.RTLD_GLOBAL)
+    except OSError:
+        ctypes.CDLL("libzmq.dylib", mode=ctypes.RTLD_GLOBAL)
+
 import sys
 import time
 import signal
