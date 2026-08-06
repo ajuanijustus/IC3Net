@@ -2,6 +2,8 @@ trained_models/
 trained_models_*/
 plots/
 
+.vscode/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -106,4 +108,4 @@ ENV/
 
 # Models
 *.onnx
-*.pt
+*.pt.DS_Store
