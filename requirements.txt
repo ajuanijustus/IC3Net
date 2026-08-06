@@ -3,3 +3,4 @@ visdom==0.1.4
 torch==0.4.0
 Pillow==6.2.0
 gym==0.9.6
+pyyaml<5.1

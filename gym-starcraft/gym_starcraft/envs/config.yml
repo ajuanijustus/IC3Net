@@ -12,10 +12,10 @@ options:
   OPENBW_ENABLE_UI: 0
   
   # Point to the directory containing bin/BWAPILauncher (bwapi_install)
-  BWAPI_INSTALL_PREFIX: /Users/ajuanijustus/Documents/Tech/TorchCraft/bwapi_install
+  BWAPI_INSTALL_PREFIX: /Users/axa1943@student.bham.ac.uk/Documents/TorchCraft/bwapi_install
   
   # Absolute map path
-  BWAPI_CONFIG_AUTO_MENU__MAP: /Users/ajuanijustus/Documents/Tech/IC3Net/gym-starcraft/maps/micro-empty.scm
+  BWAPI_CONFIG_AUTO_MENU__MAP: /Users/axa1943@student.bham.ac.uk/Documents/IC3Net/gym-starcraft/maps/micro-empty.scm
 
   # Point directly to compiled BWEnv.dylib
-  BWAPI_CONFIG_AI__AI: /Users/ajuanijustus/Documents/Tech/TorchCraft/BWEnv/build/BWEnv.dylib
+  BWAPI_CONFIG_AI__AI: /Users/axa1943@student.bham.ac.uk/Documents/TorchCraft/BWEnv/build/BWEnv.dylib
