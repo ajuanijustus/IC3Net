@@ -1,21 +1,18 @@
-# options:
-#   OPENBW_ENABLE_UI: 0
-#   # You may override this through command line environment options
-#   # BWAPI_INSTALL_PREFIX: ~/Public/bwapi
-#   BWAPI_INSTALL_PREFIX: ~/Documents/Tech/Torchcraft/bwapi
-#   # Replace with your own starcraft map
-#   BWAPI_CONFIG_AUTO_MENU__MAP: ../gym-starcraft/maps/micro-empty.scm
-  
-#   # BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.so
-#   BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.dylib # For mac replace with this
 options:
   OPENBW_ENABLE_UI: 0
-  
-  # Point to the directory containing bin/BWAPILauncher (bwapi_install)
-  BWAPI_INSTALL_PREFIX: /Users/axa1943@student.bham.ac.uk/Documents/TorchCraft/bwapi_install
-  
-  # Absolute map path
-  BWAPI_CONFIG_AUTO_MENU__MAP: /Users/axa1943@student.bham.ac.uk/Documents/IC3Net/gym-starcraft/maps/micro-empty.scm
 
-  # Point directly to compiled BWEnv.dylib
-  BWAPI_CONFIG_AI__AI: /Users/axa1943@student.bham.ac.uk/Documents/TorchCraft/BWEnv/build/BWEnv.dylib
+  # You may override this through command line environment options
+  # Point to the directory containing bin/BWAPILauncher (bwapi_install)
+  # BWAPI_INSTALL_PREFIX: ~/Public/bwapi
+  # BWAPI_INSTALL_PREFIX: /Users/axa1943@student.bham.ac.uk/Documents/TorchCraft/bwapi_install
+  BWAPI_INSTALL_PREFIX: /rds/projects/b/baberc-human-agent-teaming/Aju/TorchCraft/bwapi_install
+
+  # Replace with your own starcraft map
+  # BWAPI_CONFIG_AUTO_MENU__MAP: ../gym-starcraft/maps/micro-empty.scm
+  # BWAPI_CONFIG_AUTO_MENU__MAP: /Users/axa1943@student.bham.ac.uk/Documents/IC3Net/gym-starcraft/maps/micro-empty.scm
+  BWAPI_CONFIG_AUTO_MENU__MAP: /rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/gym-starcraft/maps/micro-empty.scm
+  
+  # BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.so
+  # BWAPI_CONFIG_AI__AI: BWEnv/build/BWEnv.dylib # For mac replace with this
+  # BWAPI_CONFIG_AI__AI: /Users/axa1943@student.bham.ac.uk/Documents/TorchCraft/BWEnv/build/BWEnv.dylib
+  BWAPI_CONFIG_AI__AI: /rds/projects/b/baberc-human-agent-teaming/Aju/TorchCraft/BWEnv/build/BWEnv.so # point directly to compiled Linux shared object (BWEnv.so)
