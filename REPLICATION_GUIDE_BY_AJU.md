@@ -145,4 +145,15 @@ self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'con
 TORCRAFT_DIR="$HOME/Documents/TorchCraft"
 
 python -u main.py --env_name starcraft --task_type explore --nagents 10 --num_epochs 1000 --hid_size 128 --lrate 0.002 --max_steps 60 --nprocesses 1 --torchcraft_dir="$TORCRAFT_DIR" --frame_skip 8 --nenemies 1 --our_unit_type 34 --enemy_unit_type 34 --init_range_end 150 --ic3net --recurrent --rnn_type LSTM --detach_gap 10 --stay_near_enemy --explore_vision 10 --step_size 16
+
+Phase 2: 
+single trainer runs:
+python main.py --env_name predator_prey --nagents 3 --nprocesses 1 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 2 --save "trained_models/phase2" --save_every 500
+
+python main.py --env_name predator_prey --nagents 3 --nprocesses 1 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 3 --save "trained_models/phase3" --save_every 500
+
+python main.py --env_name predator_prey --nagents 3 --nprocesses 16 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 4 --save "trained_models/phase4" --save_every 500
+
+--env_name traffic_junction --nagents 5 --nprocesses 16 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 6 --max_steps 20 --ic3net --vision 0 --recurrent --add_rate_min 0.1 --add_rate_max 0.3 --curr_start 250 --curr_end 1250 --difficulty easy
 ```
+

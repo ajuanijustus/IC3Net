@@ -11,141 +11,73 @@
 
 set -e
 
-echo "=== TorchCraft setup started ==="
-
-# -----------------------------
-# Modules
-# -----------------------------
+# 1. Load HPC Modules and Activate Mamba
 module purge; module load bluebear
 module load bear-apps/2022b
 module load Miniforge3/24.1.2-0
-module load CMake
-module load GCC
 
-# -----------------------------
-# Directories (use RDS, not HOME)
-# -----------------------------
-BASE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju"
-BUILD_DIR="${BASE_DIR}/torchcraft_build"
-INSTALL_DIR="${BASE_DIR}/apps"
+eval "$(${EBROOTMINIFORGE3}/bin/conda shell.bash hook)" 
+source "${EBROOTMINIFORGE3}/etc/profile.d/mamba.sh"
 
-mkdir -p "${BUILD_DIR}"
-mkdir -p "${INSTALL_DIR}"
-
-cd "${BUILD_DIR}"
-
-# -----------------------------
-# libsodium
-# -----------------------------
-echo "Installing libsodium..."
-wget -nc https://download.libsodium.org/libsodium/releases/old/unsupported/libsodium-1.0.14.tar.gz
-tar xf libsodium-1.0.14.tar.gz
-cd libsodium-1.0.14
-
-./configure --prefix="${INSTALL_DIR}"
-make -j${SLURM_CPUS_PER_TASK}
-make install
-
-cd ..
-
-# -----------------------------
-# ZeroMQ
-# -----------------------------
-echo "Installing ZeroMQ..."
-wget -nc https://archive.org/download/zeromq_4.1.4/zeromq-4.1.4.tar.gz
-tar xf zeromq-4.1.4.tar.gz
-cd zeromq-4.1.4
-
-PKG_CONFIG_PATH=${INSTALL_DIR}/lib/pkgconfig \
-./configure --prefix="${INSTALL_DIR}"
-
-make -j${SLURM_CPUS_PER_TASK}
-make install
-
-cd ..
-
-# -----------------------------
-# Environment variables
-# -----------------------------
-export CFLAGS="-I${INSTALL_DIR}/include"
-export LDFLAGS="-L${INSTALL_DIR}/lib"
-export LD_LIBRARY_PATH="${INSTALL_DIR}/lib:${LD_LIBRARY_PATH}"
-
-# -----------------------------
-# zstd
-# -----------------------------
-echo "Installing zstd..."
-git clone https://github.com/facebook/zstd || true
-cd zstd
-make -j${SLURM_CPUS_PER_TASK}
-make PREFIX=${INSTALL_DIR} install
-cd ..
-
-# -----------------------------
-# OpenBW + BWAPI
-# -----------------------------
-echo "Cloning OpenBW + BWAPI..."
-git clone https://github.com/openbw/openbw || true
-git clone https://github.com/openbw/bwapi || true
-
-cd bwapi
-mkdir -p build && cd build
-
-cmake .. \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DOPENBW_DIR=../../openbw \
-  -DCMAKE_INSTALL_PREFIX=${BASE_DIR}/bwapi
-
-make -j${SLURM_CPUS_PER_TASK}
-make install
-
-cd ../..
-
-# -----------------------------
-# TorchCraft
-# -----------------------------
-echo "Installing TorchCraft..."
-git clone https://github.com/TorchCraft/TorchCraft || true
-cd TorchCraft
-git fetch origin develop:develop || true
-git submodule update --init --recursive
-
-cd BWEnv
-mkdir -p build && cd build
-
-CC=gcc CXX=g++ \
-CXXFLAGS="-I${INSTALL_DIR}/include" \
-cmake .. \
-  -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-  -DBWAPI_DIR=../../bwapi/
-
-make -j${SLURM_CPUS_PER_TASK}
-
-cd ../..
-
-# -----------------------------
-# Python install (into your env)
-# -----------------------------
-CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3"
-
-eval "$(${EBROOTMINIFORGE3}/bin/conda shell.bash hook)"
+CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3" 
 mamba activate "${CONDA_ENV_PATH}"
 
-pip install pybind11
+# 2. Install all dependencies into Conda (Replaces 'brew install')
+mamba install -c conda-forge zstd czmq zeromq sdl2 cmake pkg-config -y
 
-LDFLAGS="-L${INSTALL_DIR}/lib" \
-CFLAGS="-I${INSTALL_DIR}/include" \
-pip install -e .
+# 3. Directory Setup
+# Adjusted to your RDS project directory rather than $HOME
+TORCRAFT_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/TorchCraft"
+mkdir -p "$TORCRAFT_DIR"
+cd "$TORCRAFT_DIR"
 
-# -----------------------------
-# Persist environment
-# -----------------------------
-echo "Saving environment variables..."
+# Clone TorchCraft
+git clone https://github.com/TorchCraft/TorchCraft .
+git submodule update --init --recursive
 
-cat <<EOF >> ${BASE_DIR}/torchcraft_env.sh
-export CFLAGS="-I${INSTALL_DIR}/include"
-export LDFLAGS="-L${INSTALL_DIR}/lib"
-export LD_LIBRARY_PATH="${INSTALL_DIR}/lib:\$LD_LIBRARY_PATH"
-EOF
+# 4. Set Compiler/Build Flags (Replaces 'brew --prefix' with '$CONDA_PREFIX')
+export CXXFLAGS="-I${CONDA_PREFIX}/include $CXXFLAGS"
+export CFLAGS="-I${CONDA_PREFIX}/include $CFLAGS"
+export LDFLAGS="-L${CONDA_PREFIX}/lib $LDFLAGS"
+export PKG_CONFIG_PATH="${CONDA_PREFIX}/lib/pkgconfig:${PKG_CONFIG_PATH}"
+export CMAKE_PREFIX_PATH="${CONDA_PREFIX}:${CMAKE_PREFIX_PATH}"
+export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}" # macOS DYLD_ removed
 
-echo "=== TorchCraft setup complete ==="
+# 5. Build BWAPI & OpenBW
+cd "$TORCRAFT_DIR"
+git clone https://github.com/openbw/openbw
+git clone https://github.com/openbw/bwapi
+
+cd "$TORCRAFT_DIR/bwapi"
+mkdir -p build && cd build
+cmake .. \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DOPENBW_DIR=../../openbw \
+  -DOPENBW_ENABLE_UI=1 \
+  -DCMAKE_INSTALL_PREFIX=../../bwapi_install
+
+# Hardcoded to 8 cores to be safe on the login node
+make install -j8
+
+# 6. Build BWEnv
+cd "$TORCRAFT_DIR/BWEnv"
+mkdir -p build && cd build
+
+# rm -rf * # uncomment if you need to clear cache later
+
+cmake .. \
+  -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
+  -DCMAKE_BUILD_TYPE=relwithdebinfo \
+  -DBWAPI_DIR="$TORCRAFT_DIR/bwapi_install" \
+  -DCMAKE_PREFIX_PATH="${CONDA_PREFIX}" \
+  -DCMAKE_INCLUDE_PATH="${CONDA_PREFIX}/include" \
+  -DCMAKE_LIBRARY_PATH="${CONDA_PREFIX}/lib"
+
+make -j8
+
+# 7. Install TorchCraft Python Bindings
+cd "$TORCRAFT_DIR"
+pip install -e . --no-cache-dir
+
+echo "TorchCraft build completed successfully!"

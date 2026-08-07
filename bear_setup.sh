@@ -17,11 +17,11 @@ module load Miniforge3/24.1.2-0
 eval "$(${EBROOTMINIFORGE3}/bin/conda shell.bash hook)" 
 source "${EBROOTMINIFORGE3}/etc/profile.d/mamba.sh"
 
-CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3" 
+CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3_test" 
 export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs" 
 
 # Create environment with Python first
-mamba create --yes --prefix "${CONDA_ENV_PATH}" python=3.21
+mamba create --yes --prefix "${CONDA_ENV_PATH}" python=3.6.15
 
 # Activate environment
 mamba activate "${CONDA_ENV_PATH}"
@@ -51,7 +51,12 @@ mamba install --yes pip setuptools wheel
 #   urllib3==1.26.20 \
 #   visdom==0.1.4
 
-pip install -e .
+pip install -r requirements.txt
+
+pip install /rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/torch-0.4.0-cp36-cp36m-linux_x86_64.whl
+
+cd ic3net-envs
+python setup.py develop
 
 # Install IC3Net environments
 # python setup.py develop
