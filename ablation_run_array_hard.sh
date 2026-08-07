@@ -1,11 +1,11 @@
 #!/bin/bash
 
-#SBATCH --array=0-15
+#SBATCH --array=0-7
 
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
 
-#SBATCH --time=2-00:00:00  # days-hours:minutes:seconds
+#SBATCH --time=9-00:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
@@ -34,7 +34,7 @@ SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_a
 mkdir -p "${SAVE_DIR}"
 
 # Read raw config line from the ablation config file
-RAW_CONFIG=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" bear_config_ablation.txt)
+RAW_CONFIG=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" bear_config_ablation_hard.txt)
 
 # 1. Extract metadata for the RUN_NAME
 ENV=$(echo "$RAW_CONFIG" | grep -oP '(?<=--env_name )\S+')
