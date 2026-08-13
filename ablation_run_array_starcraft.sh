@@ -78,4 +78,4 @@ exec > >(tee -a "$LOG_FILE") 2> >(tee -a "$ERR_FILE" >&2)
 python main.py ${CLEANED_CONFIG} \
   --save "${SAVE_PATH}" \
   --save_every 500 \
-  --torchcraft_dir=~/Public/TorchCraft
+  --torchcraft_dir="$TORCRAFT_DIR"
