@@ -45,7 +45,7 @@ RAW_CONFIG=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" bear_config_ablation_starcraft
 # 1. Extract metadata for the RUN_NAME
 ENV=$(echo "$RAW_CONFIG" | grep -oP '(?<=--env_name )\S+')
 MODEL=$(echo "$RAW_CONFIG" | grep -oP '(--ic3net|--commnet|--mean_ratio 0)' | head -n1)
-MAP=$(echo "$RAW_CONFIG" | grep -oP '(?<=--(map|map_name) )\S+' || echo "na")
+MAP=$(echo "$RAW_CONFIG" | grep -oP '--(map|map_name)\s+\K\S+' || echo "na")
 PHASE=$(echo "$RAW_CONFIG" | grep -oP '(?<=--phase )\S+' || echo "na")
 
 # Clean model name string
@@ -59,7 +59,13 @@ CLEANED_CONFIG=$(echo "$RAW_CONFIG" | sed -E 's/--(map|map_name) [^ ]+//g')
 
 # 3. Create a clean base run name
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-RUN_NAME="${ENV}_${MODEL}_${MAP}_phase${PHASE}_job${SLURM_ARRAY_TASK_ID}_${TIMESTAMP}"
+
+if [[ "$PHASE" == "na" ]]; then
+  RUN_NAME="${ENV}_${MODEL}_${MAP}_job${SLURM_ARRAY_TASK_ID}_${TIMESTAMP}"
+else
+  RUN_NAME="${ENV}_${MODEL}_${MAP}_phase${PHASE}_job${SLURM_ARRAY_TASK_ID}_${TIMESTAMP}"
+fi
+
 SAVE_PATH="${SAVE_DIR}/${RUN_NAME}"
 
 echo "Run name: ${RUN_NAME}"
