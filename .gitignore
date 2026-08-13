@@ -1,6 +1,7 @@
 trained_models/
 trained_models_*/
 plots/
+plots_*/
 
 .vscode/
 

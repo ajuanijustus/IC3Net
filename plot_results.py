@@ -7,9 +7,8 @@ import matplotlib.pyplot as plt
 # ==========================================
 # 1. CONFIGURATION, REGEX & LEGENDS
 # ==========================================
-# Now accepts a list of directories to aggregate together
-MODELS_DIRS = ["trained_models_abl_3", "trained_models_abl_4", "trained_models_abl_5"] 
-SAVE_DIR = "plots"
+MODELS_DIRS = ["trained_models_aug_abl_1", "trained_models_aug_abl_2", "trained_models_aug_abl_3"] 
+SAVE_DIR = "plots_aug"
 
 # Ensure save directory exists
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -22,13 +21,14 @@ KEY_MAPPING = {
 
 LEGEND_MAPPING = {
     'commnet': 'CommNet',
-    'ic3net': 'IC3Net',
     'iric': 'IRIC',
     'ic': 'IC',
-    'phase1': 'IC3Net',
-    'phase2': 'Phase 2 (shared encoder)',
-    'phase3': 'Phase 3 (comm matrix))',
-    'phase4': 'Phase 4 (comm matrix + split encoder)'
+    'ic3net': 'IC3Net (Comm+Env)',
+    'phase1': 'IC3Net (Comm+Env)',
+    'phase2': 'Comm/Env (comm gating + shared encoder)',
+    'phase3': 'Comm/Env (comm matrix + shared encoder)',
+    'phase4': 'Comm/Env (comm matrix + split encoder)',
+    'phase5': 'Comm/Env (fully decoupled)'
 }
 
 ALGO_COLORS = {
@@ -42,15 +42,15 @@ ALGO_COLORS = {
     'phase4': '#a366ff'        
 }
 
-# Unified Regex for grouping jobs across variations
+# Unified Regex capturing either difficulty or map in group 3 (?P<param>)
 model_pattern = re.compile(
-    r"^(?P<env>predator_prey|traffic_junction)_"
-    r"(?P<algo>ic3net|commnet|iric|ic)_"
-    r"(?P<diff>na|easy|medium|hard)_"
-    r"(?:phase(?P<phase>\d+)_)?"      
-    r"(?P<job_id>job\d+_\d+_\d+)"     
-    r"(?:_(?P<epoch>\d+))?"           # Captures trailing epoch digits if present
-    r"(?:\..*)?$"                     
+    r"^(?P<env>predator_prey|traffic_junction|starcraft)_"  # Environment
+    r"(?P<algo>ic3net|commnet|iric|ic)_"                    # Model/Algorithm
+    r"(?P<param>.+?)_"                                       # Captures difficulty or map dynamically
+    r"(?:phase(?P<phase>\d+)_)?"                             # Optional phase group
+    r"(?P<job_id>job\d+_\d+_\d+)"                          # Job ID
+    r"(?:_(?P<epoch>\d+))?"                                  # Captures trailing epoch digits if present
+    r"(?:\..*)?$"                                            # Optional file extensions
 )
 
 # ==========================================
@@ -62,45 +62,50 @@ for models_dir in MODELS_DIRS:
     if not os.path.exists(models_dir):
         print(f"Warning: Directory '{models_dir}' not found. Skipping.")
         continue
-        
+
     print(f"Scanning directory: {models_dir}")
     for item in os.listdir(models_dir):
         match = model_pattern.match(item)
         if match:
             meta = match.groupdict()
-            env, algo, diff = meta['env'], meta['algo'], meta['diff']
-            phase, job_id, epoch_str = meta['phase'], meta['job_id'], meta['epoch']
-            
+            env, algo, param = meta["env"], meta["algo"], meta["param"]
+            phase, job_id, epoch_str = (
+                meta["phase"],
+                meta["job_id"],
+                meta["epoch"],
+            )
+
             # --- ONLY USE BASE CHECKPOINT ---
-            # If an epoch suffix exists (_500, _1000, etc.), completely skip it
             if epoch_str is not None:
                 continue
-                
+
             full_path = os.path.join(models_dir, item)
-            
+
             if phase:
                 algo = f"phase{phase}"
-                
+
             env_dict = raw_dataset.setdefault(env, {})
-            diff_dict = env_dict.setdefault(diff, {})
-            algo_dict = diff_dict.setdefault(algo, {})
-            
+            param_dict = env_dict.setdefault(param, {})
+            algo_dict = param_dict.setdefault(algo, {})
+
             # Add the base checkpoint path using job_id as the seed key
             algo_dict[job_id] = full_path
 
 # Flatten into the final structure for the plotting loop
 dataset = {}
 total_checkpoints = 0
-for env, diff_dict in raw_dataset.items():
+for env, param_dict in raw_dataset.items():
     dataset[env] = {}
-    for diff, algo_dict in diff_dict.items():
-        dataset[env][diff] = {}
+    for param_val, algo_dict in param_dict.items():
+        dataset[env][param_val] = {}
         for algo, jobs in algo_dict.items():
             paths = list(jobs.values())
-            dataset[env][diff][algo] = paths
+            dataset[env][param_val][algo] = paths
             total_checkpoints += len(paths)
 
-print(f"\nFound a total of {total_checkpoints} unique base job runs across all directories.")
+print(
+    f"\nFound a total of {total_checkpoints} unique base job runs across all directories."
+)
 
 # ==========================================
 # 3. ENHANCED LOG PARSER
@@ -143,9 +148,9 @@ def extract_metric(log_data, metric_key):
 # ==========================================
 # 4. PLOTTING LOOP WITH SHADED ERROR AREAS
 # ==========================================
-for env, diff_dict in dataset.items():
-    for diff, algo_dict in diff_dict.items():
-        print(f"Generating aggregated plots for {env} ({diff})...")
+for env, param_dict in dataset.items():
+    for param_val, algo_dict in param_dict.items():
+        print(f"Generating aggregated plots for {env} ({param_val})...")
         
         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
         metrics = ['success', 'reward', 'steps']
@@ -156,7 +161,12 @@ for env, diff_dict in dataset.items():
         for idx, metric in enumerate(metrics):
             ax = axes[idx]
             
-            for algo, paths in algo_dict.items():
+            # Sort algos based on their key position in LEGEND_MAPPING
+            ordered_algos = [a for a in LEGEND_MAPPING if a in algo_dict] + \
+                            [a for a in algo_dict if a not in LEGEND_MAPPING]
+
+            for algo in ordered_algos:
+                paths = algo_dict[algo]
                 all_runs_data = []
                 
                 for path in paths:
@@ -174,59 +184,54 @@ for env, diff_dict in dataset.items():
                 
                 data_plotted = True
                 
-                # REPLICATION QUIRK 1: Hard crop timeline at 1000 epochs max
-                min_len = min(min(len(r) for r in all_runs_data), 1000)
-                truncated_runs = np.array([r[:min_len] for r in all_runs_data], dtype=np.float32)
+                # Find the absolute longest run across all seeds so NO data is cropped
+                max_len = max(len(r) for r in all_runs_data)
                 
-                # Compute base cross-seed means across all aggregated base runs
-                mean_line = np.mean(truncated_runs, axis=0)
+                # Pad shorter runs with np.nan to safely align them in a 2D array
+                padded_runs = np.full((len(all_runs_data), max_len), np.nan, dtype=np.float32)
+                for i, r in enumerate(all_runs_data):
+                    padded_runs[i, :len(r)] = r
                 
-                # REPLICATION QUIRK 2: Scale Success rate by 100 to show %
+                # Scale the raw data FIRST
                 if metric == 'success':
-                    mean_line *= 100
+                    padded_runs *= 100
                 
-                min_values = []
-                max_values = []
+                # Compute base cross-seed means & standard deviation
+                mean_line = np.nanmean(padded_runs, axis=0)
+                std_line = np.nanstd(padded_runs, axis=0, ddof=1)
                 
-                # Compute paper-compliant deviation envelope bounds epoch-by-epoch
-                for epoch_idx in range(min_len):
-                    val_at_epoch = truncated_runs[:, epoch_idx]
-                    
-                    # REPLICATION QUIRK 3: Cross-seed Variance instead of Standard Deviation
-                    variance = float(np.var(val_at_epoch))
-                    
-                    if metric == 'success':
-                        variance *= 100
-                    
-                    # REPLICATION QUIRK 4: Hard ceiling cap on variance bounds at 20
-                    variance = variance if variance < 20 else 20
-                    
-                    max_values.append(mean_line[epoch_idx] + variance)
-                    min_values.append(mean_line[epoch_idx] - variance)
+                min_values = mean_line - std_line
+                max_values = mean_line + std_line
                 
-                epochs = np.arange(1, min_len + 1)
+                epochs = np.arange(1, max_len + 1)
                 color = ALGO_COLORS.get(algo, '#7f7f7f')
                 
-                # Fetch custom legend layout name or fall back to capitalized key
                 display_label = LEGEND_MAPPING.get(algo, algo.upper())
                 
-                # Plot mean trajectories and their shaded variance areas
                 ax.plot(epochs, mean_line, label=display_label, color=color, linewidth=1.5)
                 ax.fill_between(epochs, min_values, max_values, color=color, alpha=0.2)
-            
+
             ax.set_title(titles[idx], fontsize=14, fontweight='bold')
             ax.set_xlabel('Epochs', fontsize=11)
             ax.grid(True, linestyle='--', alpha=0.6)
             
             if idx == 0:
-                ax.legend(loc='best', frameon=True)
-        
+                handles, labels = ax.get_legend_handles_labels()
+                by_label = dict(zip(labels, handles))
+                ax.legend(by_label.values(), by_label.keys(), loc='best', frameon=True)
+                
         if data_plotted:
             env_title = env.replace('_', ' ').title()
-            diff_title = diff.upper() if diff == 'na' else diff.title()
-            plt.suptitle(f"Aggregated Paper Results: {env_title} ({diff_title})", fontsize=16, fontweight='bold', y=1.02)
             
-            save_filename = f"{env}_{diff}_metrics_jul6.png"
+            # Format subtitle depending on whether it's Starcraft (Map) or other environments (Difficulty)
+            if env == 'starcraft':
+                param_title = f"Map: {param_val}"
+            else:
+                param_title = param_val.upper() if param_val == 'na' else param_val.title()
+
+            plt.suptitle(f"Aggregated Paper Results: {env_title} ({param_title})", fontsize=16, fontweight='bold', y=1.02)
+            
+            save_filename = f"{env}_{param_val}_metrics.png"
             save_path = os.path.join(SAVE_DIR, save_filename)
             plt.tight_layout()
             plt.savefig(save_path, bbox_inches='tight', dpi=200)
