@@ -3,7 +3,7 @@
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
 
-#SBATCH --time=0-12:00:00  # days-hours:minutes:seconds
+#SBATCH --time=2-00:00:00  # days-hours:minutes:seconds
 #SBATCH --nodes=1
 #SBATCH --ntasks=16
 #SBATCH --cpus-per-task=1
