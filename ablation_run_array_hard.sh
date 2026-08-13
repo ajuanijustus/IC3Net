@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --array=0-7
+#SBATCH --array=0-13
 
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
@@ -30,7 +30,7 @@ export CONDA_PKGS_DIRS="/scratch/${USER}/conda_pkgs"
 mamba activate "${CONDA_ENV_PATH}"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models_aug_abl_1"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models/trained_models_aug_all_1"
 mkdir -p "${SAVE_DIR}"
 
 # Read raw config line from the ablation config file
