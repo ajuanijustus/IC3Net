@@ -126,6 +126,12 @@ class Trainer(object):
         return (episode, stat)
 
     def compute_grad(self, batch):
+        # =========================================================
+        # PHASE 5 GUARD: Isolated Execution Path
+        # =========================================================
+        if self.args.phase == 5:
+            return self._compute_grad_phase5(batch)
+
         stat = dict()
         num_actions = self.args.num_actions
         dim_actions = self.args.dim_actions
@@ -309,3 +315,103 @@ class Trainer(object):
 
     def load_state_dict(self, state):
         self.optimizer.load_state_dict(state)
+
+    def _compute_grad_phase5(self, batch):
+        """
+        Isolated gradient computation for Phase 5 (Structural Split).
+        Preserves IC3Net cooperative/competitive return shaping and granular stat logging.
+        """
+        stat = dict()
+        num_actions = self.args.num_actions
+        dim_actions = self.args.dim_actions
+        n = self.args.nagents
+        batch_size = len(batch.state)
+
+        # 1. Unpack Batch Data
+        rewards = torch.Tensor(batch.reward)
+        episode_masks = torch.Tensor(batch.episode_mask)
+        episode_mini_masks = torch.Tensor(batch.episode_mini_mask)
+        
+        actions = torch.Tensor(batch.action)
+        actions = actions.transpose(1, 2).view(-1, n, dim_actions)
+        
+        action_out = list(zip(*batch.action_out))
+        action_out = [torch.cat(a, dim=0) for a in action_out]
+        
+        alive_masks = torch.Tensor(np.concatenate([item['alive_mask'] for item in batch.misc])).view(-1)
+
+        # 2. Unpack Dual Values
+        env_values = torch.cat([v[0] for v in batch.value], dim=0).view(batch_size, n)
+        comm_values = torch.cat([v[1] for v in batch.value], dim=0).view(batch_size, n)
+
+        # 3. IC3Net Mixed Cooperative/Competitive Returns Calculation
+        coop_returns = torch.Tensor(batch_size, n)
+        ncoop_returns = torch.Tensor(batch_size, n)
+        returns = torch.Tensor(batch_size, n)
+        prev_coop_return = 0
+        prev_ncoop_return = 0
+
+        for i in reversed(range(rewards.size(0))):
+            coop_returns[i] = rewards[i] + self.args.gamma * prev_coop_return * episode_masks[i]
+            ncoop_returns[i] = rewards[i] + self.args.gamma * prev_ncoop_return * episode_masks[i] * episode_mini_masks[i]
+            prev_coop_return = coop_returns[i].clone()
+            prev_ncoop_return = ncoop_returns[i].clone()
+            returns[i] = (self.args.mean_ratio * coop_returns[i].mean()) + ((1 - self.args.mean_ratio) * ncoop_returns[i])
+
+        # 4. Independent Advantages
+        env_advantages = torch.Tensor(batch_size, n)
+        comm_advantages = torch.Tensor(batch_size, n)
+        for i in reversed(range(rewards.size(0))):
+            env_advantages[i] = returns[i] - env_values.data[i]
+            comm_advantages[i] = returns[i] - comm_values.data[i]
+
+        if self.args.normalize_rewards:
+            env_advantages = (env_advantages - env_advantages.mean()) / (env_advantages.std() + 1e-8)
+            comm_advantages = (comm_advantages - comm_advantages.mean()) / (comm_advantages.std() + 1e-8)
+
+        # 5. Matrix Routing Action Layout Slicing (Phase 5 mirrors Phase 3/4)
+        env_action_out = action_out[:-n]
+        comm_action_out = action_out[-n:]
+        
+        env_actions = actions[:, :, :-n].contiguous().view(-1, dim_actions - n)
+        comm_actions = actions[:, :, -n:].contiguous().view(-1, n)
+
+        env_log_p_a = [env_action_out[i].view(-1, num_actions[i]) for i in range(dim_actions - n)]
+        comm_log_p_a = [comm_action_out[i].view(-1, 2) for i in range(n)]
+
+        env_log_prob = multinomials_log_density(env_actions, env_log_p_a)
+        comm_log_prob = multinomials_log_density(comm_actions, comm_log_p_a)
+
+        # 6. Action Losses
+        env_action_loss = (-env_advantages.view(-1) * env_log_prob.squeeze() * alive_masks).sum()
+        comm_action_loss = (-comm_advantages.view(-1) * comm_log_prob.squeeze() * alive_masks).sum()
+        
+        stat['env_action_loss'] = env_action_loss.item()
+        stat['comm_action_loss'] = comm_action_loss.item()
+        action_loss = env_action_loss + comm_action_loss
+
+        # 7. Value Losses
+        env_value_loss = ((env_values - returns).pow(2).view(-1) * alive_masks).sum()
+        comm_value_loss = ((comm_values - returns).pow(2).view(-1) * alive_masks).sum()
+        
+        stat['env_value_loss'] = env_value_loss.item()
+        stat['comm_value_loss'] = comm_value_loss.item()
+        value_loss = env_value_loss + comm_value_loss
+
+        # 8. Combined Loss & Entropy Regularization
+        loss = action_loss + self.args.value_coeff * value_loss
+
+        entropy = 0
+        for i in range(len(env_log_p_a)):
+            entropy -= (env_log_p_a[i] * env_log_p_a[i].exp()).sum()
+        for i in range(len(comm_log_p_a)):
+            entropy -= (comm_log_p_a[i] * comm_log_p_a[i].exp()).sum()
+            
+        stat['entropy'] = entropy.item()
+        if self.args.entr > 0:
+            loss -= self.args.entr * entropy
+
+        # 9. Trigger Backpropagation (calculates gradients for standalone modules)
+        loss.backward()
+        
+        return stat

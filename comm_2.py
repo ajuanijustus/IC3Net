@@ -2,6 +2,109 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+# ==========================================================
+# PHASE 5: STANDALONE INDEPENDENT POLICIES FOR AD-HOC TEAMING
+# ==========================================================
+
+class IsolatedCommPolicy(nn.Module):
+    """Completely standalone communication network. Can be saved/loaded independently."""
+    def __init__(self, args, num_inputs):
+        super(IsolatedCommPolicy, self).__init__()
+        self.args = args
+        self.nagents = args.nagents
+        self.hid_size = args.hid_size
+        self.comm_passes = args.comm_passes
+        
+        self.comm_encoder = nn.Linear(num_inputs, args.hid_size)
+        self.comm_f_module = nn.LSTMCell(args.hid_size, args.hid_size)
+        self.comm_head = nn.Linear(args.hid_size, args.nagents * 2) # Phase 3/4 Matrix Routing layout
+        self.comm_value_head = nn.Linear(args.hid_size, 1)
+        
+        self.C_modules = nn.ModuleList([
+            nn.Linear(args.hid_size, args.hid_size) for _ in range(self.comm_passes)
+        ])
+        if args.comm_init == 'zeros':
+            for i in range(self.comm_passes):
+                self.C_modules[i].weight.data.zero_()
+                
+        if self.args.comm_mask_zero:
+            self.comm_mask = torch.zeros(self.nagents, self.nagents)
+        else:
+            self.comm_mask = torch.ones(self.nagents, self.nagents) - torch.eye(self.nagents, self.nagents)
+
+    def forward(self, x, comm_h, comm_c, agent_mask, num_agents_alive, batch_size, n):
+        # 1. Encode multi-agent raw features
+        x_comm_encoded = self.comm_encoder(x)
+        
+        # 2. Compute dynamic targeted routing matrix logits from previous hidden state
+        comm_logits_raw = self.comm_head(comm_h).view(batch_size, n, n, 2)
+        comm_logits = F.log_softmax(comm_logits_raw, dim=-1)
+        
+        rng_state = torch.get_rng_state()
+        comm_probs_flat = torch.exp(comm_logits).view(-1, 2)
+        comm_action_flat = torch.multinomial(comm_probs_flat, 1).squeeze(-1)
+        comm_action = comm_action_flat.view(batch_size, n, n)
+        torch.set_rng_state(rng_state)
+
+        if self.args.hard_attn:
+            comm_action_mask = comm_action.unsqueeze(-1)
+            agent_mask = agent_mask * comm_action_mask.double()
+
+        agent_mask_transpose = agent_mask.transpose(1, 2)
+        
+        # 3. Message passing loop (matches Phase 4 recurrence update)
+        for i in range(self.comm_passes):
+            comm = comm_h.view(batch_size, n, self.hid_size)
+            comm = comm.unsqueeze(-2).expand(-1, n, n, self.hid_size)
+            mask = self.comm_mask.view(1, n, n).expand(comm.shape[0], n, n).unsqueeze(-1)
+            comm = comm * mask
+
+            if hasattr(self.args, 'comm_mode') and self.args.comm_mode == 'avg' and num_agents_alive > 1:
+                comm = comm / (num_agents_alive - 1)
+
+            comm = comm * agent_mask * agent_mask_transpose
+            comm_sum = comm.sum(dim=1)
+            c = self.C_modules[i](comm_sum)
+
+            # Evolve comm_h with incoming message consensus 'c'
+            comm_inp = x_comm_encoded + c
+            comm_inp_flat = comm_inp.view(batch_size * n, self.hid_size)
+            comm_h, comm_c = self.comm_f_module(comm_inp_flat, (comm_h, comm_c))
+            
+        comm_v = self.comm_value_head(comm_h)
+        return comm_logits, comm_v, c, comm_h, comm_c
+
+class IsolatedEnvPolicy(nn.Module):
+    """Completely standalone environment action network. Can be saved/loaded independently."""
+    def __init__(self, args, num_inputs):
+        super(IsolatedEnvPolicy, self).__init__()
+        self.args = args
+        self.nagents = args.nagents
+        self.hid_size = args.hid_size
+        
+        self.env_encoder = nn.Linear(num_inputs, args.hid_size)
+        self.env_f_module = nn.LSTMCell(args.hid_size, args.hid_size)
+        
+        env_action_heads = args.naction_heads[:-args.nagents]
+        self.env_heads = nn.ModuleList([nn.Linear(args.hid_size, o) for o in env_action_heads])
+        self.env_value_head = nn.Linear(args.hid_size, 1)
+
+    def forward(self, x, message_tensor, env_h, env_c, batch_size, n):
+        # 1. Encode spatial raw features independently
+        x_env_encoded = self.env_encoder(x)
+        
+        # 2. Integrate message channels from communication network API
+        env_inp = x_env_encoded + message_tensor
+        env_inp_flat = env_inp.view(batch_size * n, self.hid_size)
+        env_h, env_c = self.env_f_module(env_inp_flat, (env_h, env_c))
+        
+        # 3. Extract movement log probabilities
+        h_env_reshaped = env_h.view(batch_size, n, self.hid_size)
+        env_logits = [F.log_softmax(head(h_env_reshaped), dim=-1) for head in self.env_heads]
+        env_v = self.env_value_head(env_h)
+        
+        return env_logits, env_v, env_h, env_c
+
 class CommNetMLP(nn.Module):
     def __init__(self, args, num_inputs):
         super(CommNetMLP, self).__init__()
@@ -11,6 +114,12 @@ class CommNetMLP(nn.Module):
         self.comm_passes = args.comm_passes
         self.recurrent = args.recurrent
         self.continuous = args.continuous
+
+        # Phase 5 Checkpoint Trigger
+        if args.phase == 5:
+            self.comm_policy = IsolatedCommPolicy(args, num_inputs)
+            self.env_policy = IsolatedEnvPolicy(args, num_inputs)
+            return # Skip vanilla initialization blocks for Phase 5
         
         self.init_std = args.init_std if hasattr(args, 'comm_init_std') else 0.2
 
@@ -91,6 +200,39 @@ class CommNetMLP(nn.Module):
                           torch.zeros(batch_size * self.nagents, self.hid_size * 2, requires_grad=True)))
 
     def forward(self, x, info={}):
+        # ==========================================
+        # PHASE 5 EXECUTION (skips rest of forward)
+        # ==========================================
+        if self.args.phase == 5:
+            x, (prev_hidden, prev_cell) = x
+            batch_size = x.size()[0]
+            n = self.nagents
+            num_agents_alive, agent_mask = self.get_agent_mask(batch_size, info)
+            
+            # Unpack hidden states across policy modules
+            comm_h, env_h = prev_hidden.chunk(2, dim=-1)
+            comm_c, env_c = prev_cell.chunk(2, dim=-1)
+            
+            # 1. Run Isolated Comm Module API
+            comm_logits, comm_v, message_tensor, next_comm_h, next_comm_c = self.comm_policy(
+                x, comm_h, comm_c, agent_mask, num_agents_alive, batch_size, n
+            )
+            
+            # 2. Pass Output Stream into Isolated Environment Module API
+            env_logits, env_v, next_env_h, next_env_c = self.env_policy(
+                x, message_tensor, env_h, env_c, batch_size, n
+            )
+            
+            # Format outputs uniformly for trainer processing
+            comm_logits_heads = [comm_logits[:, :, r, :] for r in range(n)]
+            action = env_logits + comm_logits_heads
+            value = (env_v, comm_v)
+            
+            next_hidden = torch.cat([next_comm_h, next_env_h], dim=-1)
+            next_cell = torch.cat([next_comm_c, next_env_c], dim=-1)
+            return action, value, (next_hidden, next_cell)
+
+
         # Phase 1 Backward Compatibility Block
         if self.args.phase == 1:
             x, extras = x

@@ -122,8 +122,8 @@ parser.add_argument('--share_weights', default=False, action='store_true',
                     help='Share weights for hops')
 
 # Development
-parser.add_argument('--phase', type=int, default=1, choices=[1, 2, 3, 4],
-                    help="Ablation phase: 1=Vanilla, 2=Decoupled Binary, 3=Matrix Routing, 4=Representation Split")
+parser.add_argument('--phase', type=int, default=1, choices=[1, 2, 3, 4, 5],
+                    help="Ablation phase: 1=Vanilla, 2=Decoupled Binary, 3=Matrix Routing, 4=Representation Split, 5=Standalone Policies")
 
 
 init_args_for_env(parser)
@@ -159,7 +159,7 @@ args.num_inputs = num_inputs
 
 # Hard attention
 if args.hard_attn and args.commnet:
-    if args.phase in [3, 4]:
+    if args.phase in [3, 4, 5]:
         # Both Phase 3 and Phase 4 utilize the N x N targeted matrix routing architecture
         args.num_actions = [*args.num_actions, *([2] * args.nagents)]
         args.dim_actions = env.dim_actions + args.nagents
@@ -290,6 +290,10 @@ def save(path):
     d['log'] = log
     d['trainer'] = trainer.state_dict()
     torch.save(d, path)
+
+    if args.phase == 5:
+        torch.save(policy_net.env_policy.state_dict(), path + '_env.pt')
+        torch.save(policy_net.comm_policy.state_dict(), path + '_comm.pt')
 
 def load(path):
     d = torch.load(path)

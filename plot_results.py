@@ -39,7 +39,8 @@ ALGO_COLORS = {
     'phase1': '#dc8d6d',       
     'phase2': '#e6b800',       
     'phase3': '#df5454',       
-    'phase4': '#a366ff'        
+    'phase4': '#a366ff',
+    'phase5': "#00670c"      
 }
 
 # Unified Regex capturing either difficulty or map in group 3 (?P<param>)
@@ -65,6 +66,10 @@ for models_dir in MODELS_DIRS:
 
     print(f"Scanning directory: {models_dir}")
     for item in os.listdir(models_dir):
+
+        if item.endswith('_env.pt') or item.endswith('_comm.pt'):
+            continue # Skip the standalone binaries – the training script is saving three things for phase 5: my_model.pt (monolithic with logs), my_model.pt_env.pt(weights only), and my_model.pt_comm.pt (weights only).
+
         match = model_pattern.match(item)
         if match:
             meta = match.groupdict()
