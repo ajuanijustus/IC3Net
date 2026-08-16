@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --array=0-20
+#SBATCH --array=0-23
 
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
@@ -36,7 +36,7 @@ export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib:${LD_LIBRARY_PATH}" # macOS DYLD_ re
 export OPENBW_MPQ_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/sc_mpq"
 
 # Define save directory
-SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models/trained_models_aug_all_1"
+SAVE_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/trained_models/trained_models_aug_all_sc_1"
 mkdir -p "${SAVE_DIR}"
 
 # Read raw config line from the ablation config file
@@ -45,7 +45,7 @@ RAW_CONFIG=$(sed -n "$((SLURM_ARRAY_TASK_ID+1))p" bear_config_ablation_starcraft
 # 1. Extract metadata for the RUN_NAME
 ENV=$(echo "$RAW_CONFIG" | grep -oP '(?<=--env_name )\S+')
 MODEL=$(echo "$RAW_CONFIG" | grep -oP '(--ic3net|--commnet|--mean_ratio 0)' | head -n1)
-MAP=$(echo "$RAW_CONFIG" | grep -oP '--(map|map_name)\s+\K\S+' || echo "na")
+MAP=$(echo "$RAW_CONFIG" | grep -oP '(?<=--map )\S+|(?<=--map_name )\S+' || echo "na")
 PHASE=$(echo "$RAW_CONFIG" | grep -oP '(?<=--phase )\S+' || echo "na")
 
 # Clean model name string
