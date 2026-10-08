@@ -7,8 +7,10 @@ import matplotlib.pyplot as plt
 # ==========================================
 # 1. CONFIGURATION, REGEX & LEGENDS
 # ==========================================
-MODELS_DIRS = ["trained_models_aug_abl_1", "trained_models_aug_abl_2", "trained_models_aug_abl_3"] 
-SAVE_DIR = "plots_aug"
+MODELS_DIRS = ["trained_models_aug_all_1", "trained_models_aug_all_2", "trained_models_aug_all_3", \
+               "trained_models_aug_all_temp_1", "trained_models_aug_all_temp_2", "trained_models_aug_all_temp_3", \
+               "trained_models_aug_all_sc_1", "trained_models_aug_all_sc_2", "trained_models_aug_all_sc_3"] 
+SAVE_DIR = "plots_aamas"
 
 # Ensure save directory exists
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -47,11 +49,11 @@ ALGO_COLORS = {
 model_pattern = re.compile(
     r"^(?P<env>predator_prey|traffic_junction|starcraft)_"  # Environment
     r"(?P<algo>ic3net|commnet|iric|ic)_"                    # Model/Algorithm
-    r"(?P<param>.+?)_"                                       # Captures difficulty or map dynamically
-    r"(?:phase(?P<phase>\d+)_)?"                             # Optional phase group
+    r"(?P<param>.+?)_"                                      # Captures difficulty or map dynamically
+    r"(?:phase(?:(?P<phase>\d+)|na|none|null)_)?"            # Optional phase group: captures digit phase OR ignores phasena
     r"(?P<job_id>job\d+_\d+_\d+)"                          # Job ID
-    r"(?:_(?P<epoch>\d+))?"                                  # Captures trailing epoch digits if present
-    r"(?:\..*)?$"                                            # Optional file extensions
+    r"(?:_(?P<epoch>\d+))?"                                 # Captures trailing epoch digits if present
+    r"(?:\..*)?$"                                          # Optional file extensions
 )
 
 # ==========================================
@@ -60,6 +62,7 @@ model_pattern = re.compile(
 raw_dataset = {}
 
 for models_dir in MODELS_DIRS:
+    models_dir = os.path.join('trained_models', models_dir)
     if not os.path.exists(models_dir):
         print(f"Warning: Directory '{models_dir}' not found. Skipping.")
         continue
