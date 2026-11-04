@@ -50,8 +50,14 @@ if [[ "$MODEL" == "--commnet" ]]; then MODEL="commnet"; fi
 if [[ "$MODEL" == "--mean_ratio 0" ]]; then MODEL="iric"; fi
 if [[ -z "$MODEL" ]]; then MODEL="ic"; fi
 
-# 2. Clean the config string sent to Python (Strip out the difficulty flag if present)
-CLEANED_CONFIG=$(echo "$RAW_CONFIG" | sed -E 's/--difficulty [^ ]+//g')
+# 2. Clean the config string sent to Python
+# --difficulty is a real Traffic Junction flag (it selects the road layout), so keep it
+# for TJ. Predator-Prey has no such flag and would reject it, so strip it there only.
+if [[ "$ENV" == "traffic_junction" ]]; then
+  CLEANED_CONFIG="$RAW_CONFIG"
+else
+  CLEANED_CONFIG=$(echo "$RAW_CONFIG" | sed -E 's/--difficulty [^ ]+//g')
+fi
 
 # 3. Create a clean base run name
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

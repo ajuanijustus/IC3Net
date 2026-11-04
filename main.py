@@ -11,10 +11,13 @@
 #     except OSError:
 #         ctypes.CDLL("libzmq.dylib", mode=ctypes.RTLD_GLOBAL)
 
+import os
 import sys
 import time
+import random
 import signal
 import argparse
+import subprocess
 
 import numpy as np
 import torch
@@ -124,10 +127,36 @@ parser.add_argument('--share_weights', default=False, action='store_true',
 # Development
 parser.add_argument('--phase', type=int, default=1, choices=[1, 2, 3, 4, 5],
                     help="Ablation phase: 1=Vanilla, 2=Decoupled Binary, 3=Matrix Routing, 4=Representation Split, 5=Standalone Policies")
+parser.add_argument('--legacy_gate_resample', action='store_true', default=False,
+                    help='Reproduce the pre-fix gate bug in phases 2-5: re-sample the gate heads after '
+                         'the model has used its own gate sample, and keep self gates in the loss. '
+                         'Only for reproducing legacy results.')
 
 
 init_args_for_env(parser)
 args = parser.parse_args()
+
+# Seed every RNG before anything (envs included) draws from them.
+if args.seed == -1:
+    args.seed = np.random.randint(0, 10000)
+random.seed(args.seed)
+np.random.seed(args.seed)
+torch.manual_seed(args.seed)
+
+
+def get_git_info():
+    repo_dir = os.path.dirname(os.path.abspath(__file__))
+    try:
+        sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo_dir,
+                                      stderr=subprocess.DEVNULL).decode().strip()
+        dirty = subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=no'],
+                                        cwd=repo_dir, stderr=subprocess.DEVNULL).decode().strip() != ''
+        return sha, dirty
+    except Exception:
+        return None, None
+
+
+git_sha, git_dirty = get_git_info()
 
 if args.ic3net:
     args.commnet = 1
@@ -176,11 +205,8 @@ if args.commnet and (args.recurrent or args.rnn_type == 'LSTM'):
 
 parse_action_args(args)
 
-if args.seed == -1:
-    args.seed = np.random.randint(0,10000)
-torch.manual_seed(args.seed)
-
 print(args)
+print('Seed: {}  git: {}{}'.format(args.seed, git_sha, ' (dirty)' if git_dirty else ''))
 
 if args.commnet:
     policy_net = CommNetMLP(args, num_inputs)
@@ -219,6 +245,7 @@ log['success'] = LogField(list(), True, 'epoch', 'num_episodes')
 log['steps_taken'] = LogField(list(), True, 'epoch', 'num_episodes')
 log['add_rate'] = LogField(list(), True, 'epoch', 'num_episodes')
 log['comm_action'] = LogField(list(), True, 'epoch', 'num_steps')
+log['comm_density'] = LogField(list(), True, 'epoch', 'comm_pairs')
 log['enemy_comm'] = LogField(list(), True, 'epoch', 'num_steps')
 log['value_loss'] = LogField(list(), True, 'epoch', 'num_steps')
 log['action_loss'] = LogField(list(), True, 'epoch', 'num_steps')
@@ -267,6 +294,8 @@ def run(num_epochs):
             print('Steps-taken: {:.2f}'.format(stat['steps_taken']))
         if 'comm_action' in stat.keys():
             print('Comm-Action: {}'.format(stat['comm_action']))
+        if 'comm_density' in stat.keys():
+            print('Comm-Density: {:.3f}'.format(stat['comm_density']))
         if 'enemy_comm' in stat.keys():
             print('Enemy-Comm: {}'.format(stat['enemy_comm']))
 
@@ -284,16 +313,33 @@ def run(num_epochs):
         if args.save != '':
             save(args.save)
 
+def atomic_save(obj, path):
+    # Write to a temp file then rename, so a job killed mid-write never leaves a
+    # truncated checkpoint behind.
+    tmp = path + '.tmp'
+    torch.save(obj, tmp)
+    os.replace(tmp, path)
+
+
 def save(path):
     d = dict()
     d['policy_net'] = policy_net.state_dict()
     d['log'] = log
     d['trainer'] = trainer.state_dict()
-    torch.save(d, path)
+    d['args'] = dict(vars(args))
+    d['meta'] = {
+        'seed': args.seed,
+        'git_sha': git_sha,
+        'git_dirty': git_dirty,
+        'worker_seeds': getattr(trainer, 'worker_seeds', []),
+        'torch_version': torch.__version__,
+        'saved_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+    }
+    atomic_save(d, path)
 
     if args.phase == 5:
-        torch.save(policy_net.env_policy.state_dict(), path + '_env.pt')
-        torch.save(policy_net.comm_policy.state_dict(), path + '_comm.pt')
+        atomic_save(policy_net.env_policy.state_dict(), path + '_env.pt')
+        atomic_save(policy_net.comm_policy.state_dict(), path + '_comm.pt')
 
 def load(path):
     d = torch.load(path)

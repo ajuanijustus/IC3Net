@@ -62,17 +62,25 @@ class Trainer(object):
                 x = state
                 action_out, value = self.policy_net(x, info)
 
-            action = select_action(self.args, action_out)
+            # Phases 2-5 sample their gates inside the model; record those exact gates
+            # as the comm actions (unless reproducing the legacy re-sampling bug).
+            executed_gates = getattr(self.policy_net, 'last_comm_action', None)
+            if self.args.phase == 1 or getattr(self.args, 'legacy_gate_resample', False):
+                presampled = None
+            else:
+                presampled = executed_gates
+
+            action = select_action(self.args, action_out, presampled)
             action, actual = translate_action(self.args, self.env, action)
+
+            if self.args.hard_attn and self.args.commnet:
+                self._log_comm_stats(stat, info, executed_gates)
+
             next_state, reward, done, info = self.env.step(actual)
 
-            # store comm_action in info for next step
-            if self.args.hard_attn and self.args.commnet:
+            # Phase 1 (IC3Net): the gate chosen now is applied at the next step.
+            if self.args.hard_attn and self.args.commnet and self.args.phase == 1:
                 info['comm_action'] = action[-1] if not self.args.comm_action_one else np.ones(self.args.nagents, dtype=int)
-
-                stat['comm_action'] = stat.get('comm_action', 0) + info['comm_action'][:self.args.nfriendly]
-                if hasattr(self.args, 'enemy_comm') and self.args.enemy_comm:
-                    stat['enemy_comm']  = stat.get('enemy_comm', 0)  + info['comm_action'][self.args.nfriendly:]
 
 
             if 'alive_mask' in info:
@@ -125,13 +133,45 @@ class Trainer(object):
             merge_stat(self.env.get_stat(), stat)
         return (episode, stat)
 
-    def compute_grad(self, batch):
-        # =========================================================
-        # PHASE 5 GUARD: Isolated Execution Path
-        # =========================================================
-        if self.args.phase == 5:
-            return self._compute_grad_phase5(batch)
+    def _log_comm_stats(self, stat, info_in, executed_gates):
+        """Accumulate statistics of the gates that were executed at this step.
 
+        info_in is the info dict that was passed to the model for this step (it holds
+        the alive mask, and for phase 1 the gate being applied now).
+
+        comm_action  per-agent rate of open gates (matrix routing: fraction of the
+                     agent's n-1 partner links it requests open); divided by num_steps.
+        comm_density fraction of alive agent pairs whose link was actually open
+                     (both endpoints open, both alive); divided by comm_pairs.
+        """
+        n = self.args.nagents
+        nf = self.args.nfriendly
+        offdiag = 1 - np.eye(n)
+
+        if self.args.phase == 1:
+            g = np.asarray(info_in['comm_action'], dtype=float).reshape(n)
+            gate = np.repeat(g[:, None], n, axis=1)       # gate[i, j] = g_i
+            request_rate = g
+        elif self.args.phase == 2:
+            g = executed_gates[0][0].numpy().astype(float).reshape(n)
+            gate = np.repeat(g[:, None], n, axis=1)
+            request_rate = g
+        else:
+            # gate[i, r] = 1 if agent i opens its link to agent r
+            gate = np.stack([h[0].numpy() for h in executed_gates], axis=1).astype(float)
+            request_rate = (gate * offdiag).sum(1) / max(n - 1, 1)
+
+        alive = np.asarray(info_in.get('alive_mask', np.ones(n)), dtype=float).reshape(n)
+        pairs = np.outer(alive, alive) * offdiag
+        links = gate * gate.T * pairs
+
+        stat['comm_action'] = stat.get('comm_action', 0) + request_rate[:nf]
+        if hasattr(self.args, 'enemy_comm') and self.args.enemy_comm:
+            stat['enemy_comm'] = stat.get('enemy_comm', 0) + request_rate[nf:]
+        stat['comm_density'] = stat.get('comm_density', 0) + float(links.sum())
+        stat['comm_pairs'] = stat.get('comm_pairs', 0) + float(pairs.sum())
+
+    def compute_grad(self, batch):
         stat = dict()
         num_actions = self.args.num_actions
         dim_actions = self.args.dim_actions
@@ -196,7 +236,7 @@ class Trainer(object):
             return stat
 
         # ==========================================
-        # PHASE 2 & 3 GRADIENT TRACKING
+        # PHASES 2-5 GRADIENT TRACKING (dual pathway)
         # ==========================================
         env_values = torch.cat([v[0] for v in batch.value], dim=0).view(batch_size, n)
         comm_values = torch.cat([v[1] for v in batch.value], dim=0).view(batch_size, n)
@@ -237,18 +277,31 @@ class Trainer(object):
 
             env_log_p_a = [env_action_out[i].view(-1, num_actions[i]) for i in range(dim_actions - 1)]
             comm_log_p_a = [comm_action_out[0].view(-1, 2)]
-        else:  # Phases 3 and 4
+            # weight of each (row, comm head) in the loss and entropy; None = all ones
+            comm_head_weights = None
+        else:  # Phases 3, 4 and 5 (matrix routing)
             env_action_out = action_out[:-n]
             comm_action_out = action_out[-n:]
-            
+
             env_actions = actions[:, :, :-n].contiguous().view(-1, dim_actions - n)
             comm_actions = actions[:, :, -n:].contiguous().view(-1, n)
 
             env_log_p_a = [env_action_out[i].view(-1, num_actions[i]) for i in range(dim_actions - n)]
             comm_log_p_a = [comm_action_out[i].view(-1, 2) for i in range(n)]
 
+            # Row b*n + i, head r is agent i's gate towards agent r. The self gate (i == r)
+            # is always masked out of message passing, so it has no effect and is left
+            # out of the loss and entropy (kept in with --legacy_gate_resample).
+            if getattr(self.args, 'legacy_gate_resample', False):
+                comm_head_weights = None
+            else:
+                comm_head_weights = (1 - torch.eye(n)).repeat(batch_size, 1)
+
         env_log_prob = multinomials_log_density(env_actions, env_log_p_a)
-        comm_log_prob = multinomials_log_density(comm_actions, comm_log_p_a)
+        if comm_head_weights is None:
+            comm_log_prob = multinomials_log_density(comm_actions, comm_log_p_a)
+        else:
+            comm_log_prob = (multinomials_log_densities(comm_actions, comm_log_p_a) * comm_head_weights).sum(1, keepdim=True)
 
         env_action_loss = (-env_advantages.view(-1) * env_log_prob.squeeze() * alive_masks).sum()
         comm_action_loss = (-comm_advantages.view(-1) * comm_log_prob.squeeze() * alive_masks).sum()
@@ -270,8 +323,11 @@ class Trainer(object):
         for i in range(len(env_log_p_a)):
             entropy -= (env_log_p_a[i] * env_log_p_a[i].exp()).sum()
         for i in range(len(comm_log_p_a)):
-            entropy -= (comm_log_p_a[i] * comm_log_p_a[i].exp()).sum()
-            
+            if comm_head_weights is None:
+                entropy -= (comm_log_p_a[i] * comm_log_p_a[i].exp()).sum()
+            else:
+                entropy -= ((comm_log_p_a[i] * comm_log_p_a[i].exp()).sum(1) * comm_head_weights[:, i]).sum()
+
         stat['entropy'] = entropy.item()
         if self.args.entr > 0:
             loss -= self.args.entr * entropy
@@ -315,103 +371,3 @@ class Trainer(object):
 
     def load_state_dict(self, state):
         self.optimizer.load_state_dict(state)
-
-    def _compute_grad_phase5(self, batch):
-        """
-        Isolated gradient computation for Phase 5 (Structural Split).
-        Preserves IC3Net cooperative/competitive return shaping and granular stat logging.
-        """
-        stat = dict()
-        num_actions = self.args.num_actions
-        dim_actions = self.args.dim_actions
-        n = self.args.nagents
-        batch_size = len(batch.state)
-
-        # 1. Unpack Batch Data
-        rewards = torch.Tensor(batch.reward)
-        episode_masks = torch.Tensor(batch.episode_mask)
-        episode_mini_masks = torch.Tensor(batch.episode_mini_mask)
-        
-        actions = torch.Tensor(batch.action)
-        actions = actions.transpose(1, 2).view(-1, n, dim_actions)
-        
-        action_out = list(zip(*batch.action_out))
-        action_out = [torch.cat(a, dim=0) for a in action_out]
-        
-        alive_masks = torch.Tensor(np.concatenate([item['alive_mask'] for item in batch.misc])).view(-1)
-
-        # 2. Unpack Dual Values
-        env_values = torch.cat([v[0] for v in batch.value], dim=0).view(batch_size, n)
-        comm_values = torch.cat([v[1] for v in batch.value], dim=0).view(batch_size, n)
-
-        # 3. IC3Net Mixed Cooperative/Competitive Returns Calculation
-        coop_returns = torch.Tensor(batch_size, n)
-        ncoop_returns = torch.Tensor(batch_size, n)
-        returns = torch.Tensor(batch_size, n)
-        prev_coop_return = 0
-        prev_ncoop_return = 0
-
-        for i in reversed(range(rewards.size(0))):
-            coop_returns[i] = rewards[i] + self.args.gamma * prev_coop_return * episode_masks[i]
-            ncoop_returns[i] = rewards[i] + self.args.gamma * prev_ncoop_return * episode_masks[i] * episode_mini_masks[i]
-            prev_coop_return = coop_returns[i].clone()
-            prev_ncoop_return = ncoop_returns[i].clone()
-            returns[i] = (self.args.mean_ratio * coop_returns[i].mean()) + ((1 - self.args.mean_ratio) * ncoop_returns[i])
-
-        # 4. Independent Advantages
-        env_advantages = torch.Tensor(batch_size, n)
-        comm_advantages = torch.Tensor(batch_size, n)
-        for i in reversed(range(rewards.size(0))):
-            env_advantages[i] = returns[i] - env_values.data[i]
-            comm_advantages[i] = returns[i] - comm_values.data[i]
-
-        if self.args.normalize_rewards:
-            env_advantages = (env_advantages - env_advantages.mean()) / (env_advantages.std() + 1e-8)
-            comm_advantages = (comm_advantages - comm_advantages.mean()) / (comm_advantages.std() + 1e-8)
-
-        # 5. Matrix Routing Action Layout Slicing (Phase 5 mirrors Phase 3/4)
-        env_action_out = action_out[:-n]
-        comm_action_out = action_out[-n:]
-        
-        env_actions = actions[:, :, :-n].contiguous().view(-1, dim_actions - n)
-        comm_actions = actions[:, :, -n:].contiguous().view(-1, n)
-
-        env_log_p_a = [env_action_out[i].view(-1, num_actions[i]) for i in range(dim_actions - n)]
-        comm_log_p_a = [comm_action_out[i].view(-1, 2) for i in range(n)]
-
-        env_log_prob = multinomials_log_density(env_actions, env_log_p_a)
-        comm_log_prob = multinomials_log_density(comm_actions, comm_log_p_a)
-
-        # 6. Action Losses
-        env_action_loss = (-env_advantages.view(-1) * env_log_prob.squeeze() * alive_masks).sum()
-        comm_action_loss = (-comm_advantages.view(-1) * comm_log_prob.squeeze() * alive_masks).sum()
-        
-        stat['env_action_loss'] = env_action_loss.item()
-        stat['comm_action_loss'] = comm_action_loss.item()
-        action_loss = env_action_loss + comm_action_loss
-
-        # 7. Value Losses
-        env_value_loss = ((env_values - returns).pow(2).view(-1) * alive_masks).sum()
-        comm_value_loss = ((comm_values - returns).pow(2).view(-1) * alive_masks).sum()
-        
-        stat['env_value_loss'] = env_value_loss.item()
-        stat['comm_value_loss'] = comm_value_loss.item()
-        value_loss = env_value_loss + comm_value_loss
-
-        # 8. Combined Loss & Entropy Regularization
-        loss = action_loss + self.args.value_coeff * value_loss
-
-        entropy = 0
-        for i in range(len(env_log_p_a)):
-            entropy -= (env_log_p_a[i] * env_log_p_a[i].exp()).sum()
-        for i in range(len(comm_log_p_a)):
-            entropy -= (comm_log_p_a[i] * comm_log_p_a[i].exp()).sum()
-            
-        stat['entropy'] = entropy.item()
-        if self.args.entr > 0:
-            loss -= self.args.entr * entropy
-
-        # 9. Trigger Backpropagation (calculates gradients for standalone modules)
-        loss.backward()
-        
-        return stat

@@ -1,4 +1,5 @@
 import time
+import random
 from utils import *
 import torch
 import torch.multiprocessing as mp
@@ -16,8 +17,9 @@ class MultiProcessWorker(mp.Process):
 
     def run(self):
         # print(f"[Worker {self.id}] ENTERED RUN", flush=True)
-        torch.manual_seed(self.seed + self.id + 1)
-        np.random.seed(self.seed + self.id + 1)
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
+        random.seed(self.seed)
 
         while True:
             # print(f"[Worker {self.id}] waiting for task", flush=True)
@@ -49,10 +51,14 @@ class MultiProcessTrainer(object):
         self.comms = []
         # itself will do the same job as workers
         self.nworkers = args.nprocesses - 1
+        # One independent seed per worker, derived from the run seed. (The old scheme,
+        # seed + id + 1, made runs with nearby seeds share worker RNG streams.)
+        self.worker_seeds = [int(s) for s in
+                             np.random.RandomState(args.seed).randint(1, 2**31 - 1, size=self.nworkers)]
         for i in range(self.nworkers):
             comm, comm_remote = mp.Pipe()
             self.comms.append(comm)
-            worker = MultiProcessWorker(i, trainer_maker, comm_remote, seed=args.seed)
+            worker = MultiProcessWorker(i, trainer_maker, comm_remote, seed=self.worker_seeds[i])
             worker.start()
             # print("[Trainer] workers started")
         # print("[Trainer] done creating workers")

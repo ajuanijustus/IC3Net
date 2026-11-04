@@ -24,16 +24,28 @@ def parse_action_args(args):
             raise RuntimeError("--nactions wrong format!")
 
 
-def select_action(args, action_out):
+def select_action(args, action_out, presampled_tail=None):
+    """Sample one action per head.
+
+    presampled_tail: optional list of LongTensors of shape (batch, nagents) holding
+    actions that were already sampled (and executed) inside the model, for the last
+    len(presampled_tail) heads. Those heads are taken as given instead of being
+    sampled again, so the recorded action is the executed one. Used for the gate
+    heads of the dual-pathway models (phases 2-5).
+    """
     if args.continuous:
         action_mean, _, action_std = action_out
         action = torch.normal(action_mean, action_std)
         return action.detach()
     else:
         log_p_a = action_out
-        p_a = [[z.exp() for z in x] for x in log_p_a]
-        ret = torch.stack([torch.stack([torch.multinomial(x, 1).detach() for x in p]) for p in p_a])
-        return ret
+        n_pre = len(presampled_tail) if presampled_tail is not None else 0
+        n_sampled = len(log_p_a) - n_pre
+        p_a = [[z.exp() for z in x] for x in log_p_a[:n_sampled]]
+        heads = [torch.stack([torch.multinomial(x, 1).detach() for x in p]) for p in p_a]
+        for g in (presampled_tail or []):
+            heads.append(g.detach().long().unsqueeze(-1))
+        return torch.stack(heads)
 
 def translate_action(args, env, action):
     if args.num_actions[0] > 0:

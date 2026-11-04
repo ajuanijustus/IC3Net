@@ -112,3 +112,6 @@ ENV/
 *.onnx
 *.pt.DS_Store
 .DS_Store
+
+# SLURM job logs
+slurm_logs/

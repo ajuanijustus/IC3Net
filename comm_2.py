@@ -2,6 +2,30 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+
+def sample_gate_actions(comm_log_probs, args):
+    """Sample binary talk/silent gate actions from log-probs of shape (..., 2).
+
+    Returns a LongTensor of shape comm_log_probs.shape[:-1].
+
+    The sampled gate is the one used to mask messages, so the caller must also use it
+    as the recorded action for the REINFORCE update (see `last_comm_action`).
+
+    With --legacy_gate_resample the RNG state is saved and restored around the draw,
+    reproducing the pre-fix code exactly: the trainer then re-samples the gate heads in
+    select_action, so the trained gate is not the executed one. Use only to reproduce
+    legacy results.
+    """
+    legacy = getattr(args, 'legacy_gate_resample', False)
+    probs_flat = torch.exp(comm_log_probs).view(-1, 2)
+    if legacy:
+        rng_state = torch.get_rng_state()
+    gate_flat = torch.multinomial(probs_flat, 1).squeeze(-1)
+    if legacy:
+        torch.set_rng_state(rng_state)
+    return gate_flat.view(comm_log_probs.shape[:-1])
+
+
 # ==========================================================
 # PHASE 5: STANDALONE INDEPENDENT POLICIES FOR AD-HOC TEAMING
 # ==========================================================
@@ -39,12 +63,9 @@ class IsolatedCommPolicy(nn.Module):
         # 2. Compute dynamic targeted routing matrix logits from previous hidden state
         comm_logits_raw = self.comm_head(comm_h).view(batch_size, n, n, 2)
         comm_logits = F.log_softmax(comm_logits_raw, dim=-1)
-        
-        rng_state = torch.get_rng_state()
-        comm_probs_flat = torch.exp(comm_logits).view(-1, 2)
-        comm_action_flat = torch.multinomial(comm_probs_flat, 1).squeeze(-1)
-        comm_action = comm_action_flat.view(batch_size, n, n)
-        torch.set_rng_state(rng_state)
+
+        # comm_action[b, i, j] = 1 if agent i opens its link to agent j
+        comm_action = sample_gate_actions(comm_logits, self.args)
 
         if self.args.hard_attn:
             comm_action_mask = comm_action.unsqueeze(-1)
@@ -72,7 +93,7 @@ class IsolatedCommPolicy(nn.Module):
             comm_h, comm_c = self.comm_f_module(comm_inp_flat, (comm_h, comm_c))
             
         comm_v = self.comm_value_head(comm_h)
-        return comm_logits, comm_v, c, comm_h, comm_c
+        return comm_logits, comm_v, c, comm_h, comm_c, comm_action
 
 class IsolatedEnvPolicy(nn.Module):
     """Completely standalone environment action network. Can be saved/loaded independently."""
@@ -114,6 +135,11 @@ class CommNetMLP(nn.Module):
         self.comm_passes = args.comm_passes
         self.recurrent = args.recurrent
         self.continuous = args.continuous
+
+        # Gate actions actually used to mask messages in the latest forward pass
+        # (phases 2-5 only), as a list aligned with the comm action heads, each of
+        # shape (batch, nagents). The trainer records these as the comm actions.
+        self.last_comm_action = None
 
         # Phase 5 Checkpoint Trigger
         if args.phase == 5:
@@ -214,9 +240,10 @@ class CommNetMLP(nn.Module):
             comm_c, env_c = prev_cell.chunk(2, dim=-1)
             
             # 1. Run Isolated Comm Module API
-            comm_logits, comm_v, message_tensor, next_comm_h, next_comm_c = self.comm_policy(
+            comm_logits, comm_v, message_tensor, next_comm_h, next_comm_c, comm_action = self.comm_policy(
                 x, comm_h, comm_c, agent_mask, num_agents_alive, batch_size, n
             )
+            self.last_comm_action = [comm_action[:, :, r] for r in range(n)]
             
             # 2. Pass Output Stream into Isolated Environment Module API
             env_logits, env_v, next_env_h, next_env_c = self.env_policy(
@@ -291,9 +318,8 @@ class CommNetMLP(nn.Module):
         # 2. GATING / ROUTING DECISION (Based on incoming time-step state)
         if self.args.phase == 2:
             comm_logits = F.log_softmax(self.comm_head(comm_h), dim=-1)
-            rng_state = torch.get_rng_state()
-            comm_action = torch.multinomial(torch.exp(comm_logits), 1).squeeze(-1)
-            torch.set_rng_state(rng_state)
+            comm_action = sample_gate_actions(comm_logits, self.args)
+            self.last_comm_action = [comm_action.view(batch_size, n)]
 
             if self.args.hard_attn:
                 comm_action_mask = comm_action.view(batch_size, n, 1).expand(batch_size, n, n).unsqueeze(-1)
@@ -302,12 +328,10 @@ class CommNetMLP(nn.Module):
         elif self.args.phase in [3, 4]:
             comm_logits_raw = self.comm_head(comm_h).view(batch_size, n, n, 2)
             comm_logits = F.log_softmax(comm_logits_raw, dim=-1)
-            
-            rng_state = torch.get_rng_state()
-            comm_probs_flat = torch.exp(comm_logits).view(-1, 2)
-            comm_action_flat = torch.multinomial(comm_probs_flat, 1).squeeze(-1)
-            comm_action = comm_action_flat.view(batch_size, n, n)
-            torch.set_rng_state(rng_state)
+
+            # comm_action[b, i, j] = 1 if agent i opens its link to agent j
+            comm_action = sample_gate_actions(comm_logits, self.args)
+            self.last_comm_action = [comm_action[:, :, r] for r in range(n)]
 
             if self.args.hard_attn:
                 comm_action_mask = comm_action.unsqueeze(-1)
