@@ -53,8 +53,11 @@ class MultiProcessTrainer(object):
         self.nworkers = args.nprocesses - 1
         # One independent seed per worker, derived from the run seed. (The old scheme,
         # seed + id + 1, made runs with nearby seeds share worker RNG streams.)
+        # After a resume, draw a fresh set so workers don't replay the first part's streams.
+        resume_epoch = getattr(args, 'resume_epoch', 0)
+        seed_src = args.seed if not resume_epoch else [args.seed, resume_epoch]
         self.worker_seeds = [int(s) for s in
-                             np.random.RandomState(args.seed).randint(1, 2**31 - 1, size=self.nworkers)]
+                             np.random.RandomState(seed_src).randint(1, 2**31 - 1, size=self.nworkers)]
         for i in range(self.nworkers):
             comm, comm_remote = mp.Pipe()
             self.comms.append(comm)

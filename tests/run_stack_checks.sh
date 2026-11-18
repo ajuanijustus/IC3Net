@@ -4,7 +4,7 @@
 #
 #   conda activate ic3
 #   bash tests/run_stack_checks.sh            # all checks
-#   bash tests/run_stack_checks.sh smoke      # or: gates | layout | determinism | parity
+#   bash tests/run_stack_checks.sh smoke      # or: gates | layout | determinism | resume | parity
 #
 # PY overrides the interpreter (default: python). LEGACY_REF overrides the legacy ref
 # (default: legacy-aamas2027). Each check prints PASS/FAIL; the exit code is the number
@@ -45,6 +45,27 @@ filter_log() { grep -E '^(Epoch|Success|Steps-taken|Add-Rate)' "$1" | sed -E 's/
 if want gates; then
   if $PY tests/test_gates.py > "$WORK/gates.log" 2>&1; then pass "gate consistency (tests/test_gates.py)"
   else fail "gate consistency (see $WORK/gates.log)"; fi
+  if $PY tests/test_phase_equivalence.py > "$WORK/equiv.log" 2>&1; then pass "phase 4 == phase 5 (tests/test_phase_equivalence.py)"
+  else fail "phase 4 == phase 5 (see $WORK/equiv.log)"; fi
+fi
+
+# ---------------------------------------------------------------- resume from checkpoint
+if want resume; then
+  ck="$WORK/resume_ck"
+  $PY main.py $PP_EASY $TINY $(arch_flags phase3) --nprocesses 2 --seed 5 --num_epochs 2 --save "$ck" > "$WORK/resume_1.log" 2>&1
+  $PY main.py $PP_EASY $TINY $(arch_flags phase3) --nprocesses 2 --seed 5 --num_epochs 4 --save "$ck" --resume > "$WORK/resume_2.log" 2>&1
+  if grep -q "Resuming .* from epoch 2" "$WORK/resume_2.log" \
+     && $PY -c "
+import torch, sys
+d = torch.load(sys.argv[1])
+assert d['log']['epoch'].data == [1, 2, 3, 4], d['log']['epoch'].data
+assert d['meta']['resumed_at_epochs'] == [2], d['meta']['resumed_at_epochs']
+assert 'rng' in d
+" "$ck" >> "$WORK/resume_2.log" 2>&1; then
+    pass "resume (2 epochs, then resumed to 4)"
+  else
+    fail "resume (see $WORK/resume_*.log)"
+  fi
 fi
 
 # ---------------------------------------------------------------- smoke runs

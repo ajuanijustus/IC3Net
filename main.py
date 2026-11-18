@@ -131,6 +131,9 @@ parser.add_argument('--legacy_gate_resample', action='store_true', default=False
                     help='Reproduce the pre-fix gate bug in phases 2-5: re-sample the gate heads after '
                          'the model has used its own gate sample, and keep self gates in the loss. '
                          'Only for reproducing legacy results.')
+parser.add_argument('--resume', action='store_true', default=False,
+                    help='If the --save checkpoint already exists, load it and train only the '
+                         'remaining epochs up to --num_epochs.')
 
 
 init_args_for_env(parser)
@@ -225,6 +228,14 @@ print('Sharing parameters among threads, but not gradients.')
 for p in policy_net.parameters():
     p.data.share_memory_()
 
+# Resuming: read the existing checkpoint now, because the workers' seeds depend on
+# where training resumes (they must not replay the random streams of the first part).
+resume_state = None
+args.resume_epoch = 0
+if args.resume and args.save != '' and os.path.exists(args.save):
+    resume_state = torch.load(args.save)
+    args.resume_epoch = len(resume_state['log']['epoch'].data)
+
 if args.nprocesses > 1:
     print('Initialising MultiProcessTrainer.')
     trainer = MultiProcessTrainer(args, lambda: Trainer(args, policy_net, data.init(args.env_name, args)))
@@ -305,10 +316,9 @@ def run(num_epochs):
                     vis.line(np.asarray(v.data), np.asarray(log[v.x_axis].data[-len(v.data):]),
                     win=k, opts=dict(xlabel=v.x_axis, ylabel=k))
 
-        if args.save_every and ep and args.save != '' and ep % args.save_every == 0:
-            # fname, ext = args.save.split('.')
-            # save(fname + '_' + str(ep) + '.' + ext)
-            save(args.save + '_' + str(ep))
+        # Snapshot named by the global epoch count, so names stay right after a resume.
+        if args.save_every and args.save != '' and epoch % args.save_every == 0:
+            save(args.save + '_' + str(epoch))
 
         if args.save != '':
             save(args.save)
@@ -334,7 +344,13 @@ def save(path):
         'worker_seeds': getattr(trainer, 'worker_seeds', []),
         'torch_version': torch.__version__,
         'saved_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'run_label': os.environ.get('RUN_LABEL'),
+        'slurm_job_id': os.environ.get('SLURM_JOB_ID'),
+        'slurm_array_task_id': os.environ.get('SLURM_ARRAY_TASK_ID'),
+        'resumed_at_epochs': resumed_at_epochs,
     }
+    # Main-process RNG states, restored on --resume. (Workers are re-seeded instead.)
+    d['rng'] = {'torch': torch.get_rng_state(), 'numpy': np.random.get_state(), 'random': random.getstate()}
     atomic_save(d, path)
 
     if args.phase == 5:
@@ -356,10 +372,23 @@ def signal_handler(signal, frame):
 
 signal.signal(signal.SIGINT, signal_handler)
 
+resumed_at_epochs = []
+if resume_state is not None:
+    policy_net.load_state_dict(resume_state['policy_net'])
+    log.update(resume_state['log'])
+    trainer.load_state_dict(resume_state['trainer'])
+    resumed_at_epochs = list(resume_state.get('meta', {}).get('resumed_at_epochs', [])) + [args.resume_epoch]
+    if 'rng' in resume_state:
+        torch.set_rng_state(resume_state['rng']['torch'])
+        np.random.set_state(resume_state['rng']['numpy'])
+        random.setstate(resume_state['rng']['random'])
+    print('Resuming {} from epoch {}'.format(args.save, args.resume_epoch))
+    del resume_state
+
 if args.load != '':
     load(args.load)
 
-run(args.num_epochs)
+run(max(args.num_epochs - args.resume_epoch, 0))
 
 if args.display:
     env.end_display()
