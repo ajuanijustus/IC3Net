@@ -115,3 +115,7 @@ ENV/
 
 # SLURM job logs
 slurm_logs/
+
+# Generated outputs
+bridge_fixtures/
+results_export/

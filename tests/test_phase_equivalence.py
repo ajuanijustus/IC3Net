@@ -16,7 +16,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
-from comm_2 import CommNetMLP  # noqa: E402
+from comm import CommNetMLP  # noqa: E402
 
 torch.set_default_tensor_type('torch.DoubleTensor')
 

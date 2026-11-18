@@ -5,6 +5,8 @@
 #   conda activate ic3
 #   bash tests/run_stack_checks.sh            # all checks
 #   bash tests/run_stack_checks.sh smoke      # or: gates | layout | determinism | resume | parity
+#   bash tests/run_stack_checks.sh fixtures   # opt-in: record bridge fixtures to bridge_fixtures/
+#                                             # (or FIXTURES_OUT); not part of 'all'
 #
 # PY overrides the interpreter (default: python). LEGACY_REF overrides the legacy ref
 # (default: legacy-aamas2027). Each check prints PASS/FAIL; the exit code is the number
@@ -137,6 +139,16 @@ exec(compile(open('main.py').read(), 'main.py', 'exec'))
       fi
     done
   done
+fi
+
+# ---------------------------------------------------------------- bridge fixtures (opt-in)
+if [[ "$ONLY" == "fixtures" ]]; then
+  FX=${FIXTURES_OUT:-$REPO/bridge_fixtures}
+  if $PY scripts/record_fixtures.py "$FX" > "$WORK/fixtures.log" 2>&1 && [[ -f "$FX/manifest.json" ]]; then
+    pass "bridge fixtures recorded in $FX ($(du -sh "$FX" | cut -f1))"
+  else
+    fail "bridge fixtures (see $WORK/fixtures.log)"
+  fi
 fi
 
 echo

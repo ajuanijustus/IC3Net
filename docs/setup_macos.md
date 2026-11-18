@@ -1,4 +1,6 @@
-# IC3NET REPLICATION GUIDE (MacOS)
+# Setup on macOS (Apple Silicon, via Rosetta)
+
+For BlueBEAR, see [setup_bear.md](setup_bear.md).
 
 ## Environment Setup (Apple Silicon / osx-64)
 
@@ -20,12 +22,16 @@ conda config --env --set channel_priority strict
 conda env config vars set CONDA_SUBDIR=osx-64
 ```
 
-## Clone & Install IC3Net
+## Clone & install
 ``` Bash
-git clone https://github.com/IC3Net/IC3Net
-
+git clone https://github.com/ajuanijustus/IC3Net
 cd IC3Net
 pip install -r requirements.txt
+
+# torch 0.4.0 (CPU, osx-64) from the official archive, checked against its SHA-256
+curl -fsSLO https://download.pytorch.org/whl/torch-0.4.0-cp36-cp36m-macosx_10_7_x86_64.whl
+echo "bde3b8131973dd8a454be9e0aa3b1a7df410afe16c58ae7eed848005bd449aac  torch-0.4.0-cp36-cp36m-macosx_10_7_x86_64.whl" | shasum -a 256 -c -
+pip install torch-0.4.0-cp36-cp36m-macosx_10_7_x86_64.whl
 
 cd ic3net-envs
 python setup.py develop
@@ -117,7 +123,7 @@ cd ..
 
 ## Notes
 **Patch notes to original IC3Net get it working:**
-1. Fix ZeroMQ Dynamic Loading (`main.py`): To prevent symbol visibility errors with czmq / libzmq extensions on modern macOS architectures, added the following snippet to `main.py`:
+1. Fix ZeroMQ Dynamic Loading (`main.py`): To prevent symbol visibility errors with czmq / libzmq extensions on modern macOS architectures, the following snippet can be enabled at the top of `main.py` (it is there, commented out):
 ```python
 import ctypes, sys, os
 
@@ -140,20 +146,12 @@ Update `./gym-starcraft/gym_starcraft/envs/starcraft_base_env.py` so the config 
 self.config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config.yml')
 ```
 
-**To test the setup with nprocesses 1:**
+**To test the StarCraft setup with one process:**
 ```Bash
-TORCRAFT_DIR="$HOME/Documents/TorchCraft"
-
-python -u main.py --env_name starcraft --task_type explore --nagents 10 --num_epochs 1000 --hid_size 128 --lrate 0.002 --max_steps 60 --nprocesses 1 --torchcraft_dir="$TORCRAFT_DIR" --frame_skip 8 --nenemies 1 --our_unit_type 34 --enemy_unit_type 34 --init_range_end 150 --ic3net --recurrent --rnn_type LSTM --detach_gap 10 --stay_near_enemy --explore_vision 10 --step_size 16
-
-Phase 2: 
-single trainer runs:
-python main.py --env_name predator_prey --nagents 3 --nprocesses 1 --num_epochs 100 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 5 --save "trained_models/phase5test" --save_every 50
-
-python main.py --env_name predator_prey --nagents 3 --nprocesses 1 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 3 --save "trained_models/phase3" --save_every 500
-
-python main.py --env_name predator_prey --nagents 3 --nprocesses 16 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 5 --max_steps 20 --ic3net --vision 0 --recurrent --phase 4 --save "trained_models/phase4" --save_every 500
-
---env_name traffic_junction --nagents 5 --nprocesses 16 --num_epochs 2000 --hid_size 128 --detach_gap 10 --lrate 0.001 --dim 6 --max_steps 20 --ic3net --vision 0 --recurrent --add_rate_min 0.1 --add_rate_max 0.3 --curr_start 250 --curr_end 1250 --difficulty easy
+python -u main.py --env_name starcraft --task_type explore --nagents 10 --num_epochs 2 --hid_size 128 \
+  --lrate 0.002 --max_steps 60 --nprocesses 1 --torchcraft_dir="$HOME/Documents/TorchCraft" --frame_skip 8 \
+  --nenemies 1 --our_unit_type 34 --enemy_unit_type 34 --init_range_end 150 --ic3net --recurrent \
+  --rnn_type LSTM --detach_gap 10 --stay_near_enemy --explore_vision 10 --step_size 16
 ```
 
+For PP/TJ, `bash tests/run_stack_checks.sh` checks the whole stack.

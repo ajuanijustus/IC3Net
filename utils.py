@@ -12,6 +12,15 @@ from torch.autograd import Variable
 
 LogField = namedtuple('LogField', ('data', 'plot', 'x_axis', 'divide_by'))
 
+def torch_load(path):
+    """torch.load for full checkpoints on any torch version (newer versions default to
+    weights-only loading, which cannot read the pickled log)."""
+    try:
+        return torch.load(path, map_location='cpu', weights_only=False)
+    except TypeError:  # torch < 1.13 has no weights_only argument
+        return torch.load(path, map_location='cpu')
+
+
 def merge_stat(src, dest):
     for k, v in src.items():
         if not k in dest:

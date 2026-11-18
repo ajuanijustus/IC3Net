@@ -1,4 +1,11 @@
 #!/bin/bash
+# Build TorchCraft (OpenBW + BWAPI + BWEnv) on BlueBEAR into an existing ic3 env
+# (create it first with setup/bear_env.sh), then install gym-starcraft.
+#
+#   cd <repo root> && sbatch setup/bear_starcraft.sh
+#
+# Needs the StarCraft 1.16.1 MPQ files at runtime (OPENBW_MPQ_PATH); see docs/setup_bear.md.
+# Override locations with IC3_CONDA_ENV and TORCHCRAFT_DIR.
 
 #SBATCH --account=baberc-human-agent-teaming
 #SBATCH --qos=bbdefault
@@ -6,10 +13,11 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --job-name=torchcraft_setup
 
-#SBATCH --output=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.out
-#SBATCH --error=/rds/projects/b/baberc-human-agent-teaming/Aju/IC3Net/slurm_logs/%x_%j.err
+#SBATCH --output=slurm_logs/%x_%j.out
+#SBATCH --error=slurm_logs/%x_%j.out
 
 set -e
+REPO_DIR="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 
 # 1. Load HPC Modules and Activate Mamba
 module purge; module load bluebear
@@ -19,7 +27,7 @@ module load Miniforge3/24.1.2-0
 eval "$(${EBROOTMINIFORGE3}/bin/conda shell.bash hook)" 
 source "${EBROOTMINIFORGE3}/etc/profile.d/mamba.sh"
 
-CONDA_ENV_PATH="/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3" 
+CONDA_ENV_PATH="${IC3_CONDA_ENV:-/rds/projects/b/baberc-human-agent-teaming/Aju/${USER}_conda_envs/ic3}"
 mamba activate "${CONDA_ENV_PATH}"
 
 # 2. Install all dependencies into Conda (Replaces 'brew install')
@@ -27,7 +35,7 @@ mamba install -c conda-forge zstd czmq zeromq sdl2 cmake pkg-config -y
 
 # 3. Directory Setup
 # Adjusted to your RDS project directory rather than $HOME
-TORCRAFT_DIR="/rds/projects/b/baberc-human-agent-teaming/Aju/TorchCraft"
+TORCRAFT_DIR="${TORCHCRAFT_DIR:-/rds/projects/b/baberc-human-agent-teaming/Aju/TorchCraft}"
 mkdir -p "$TORCRAFT_DIR"
 cd "$TORCRAFT_DIR"
 
@@ -80,4 +88,8 @@ make -j8
 cd "$TORCRAFT_DIR"
 pip install -e . --no-cache-dir
 
-echo "TorchCraft build completed successfully!"
+# 8. Install gym-starcraft from this repo
+cd "$REPO_DIR/gym-starcraft"
+python setup.py develop
+
+echo "TorchCraft and gym-starcraft installed. Set BWAPI paths in gym-starcraft/gym_starcraft/envs/config.yml."
