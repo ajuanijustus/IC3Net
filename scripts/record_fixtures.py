@@ -10,8 +10,10 @@ numpy arrays only (no pickled objects), so any later numpy can read them:
       Per episode e: obs (T+1, n, d), actions (T, n), rewards (T, n), done (T,), and every
       numeric info array (e.g. alive_mask, is_completed, car_loc, predator_locs), plus the
       terminal reward, final success and add_rate. Actions come from a separate RandomState,
-      so the env's own use of the global numpy RNG is exactly what training sees. TJ episodes
-      reset at several curriculum epochs.
+      so the env's own use of the global numpy RNG is exactly what training sees. TJ actions
+      are uniform. PP actions step towards the prey with a per-episode probability (0.9, 0.5,
+      0.0), so fixtures cover reaching the prey, ending early and succeeding, as well as
+      failing at max_steps. TJ episodes reset at several curriculum epochs.
 
   <out_dir>/model/<scenario>__<arch>.npz
       One training batch from the real Trainer for each architecture: the initial state dict
@@ -48,6 +50,7 @@ ENV_IDS = {'predator_prey': 'PredatorPrey-v0', 'traffic_junction': 'TrafficJunct
 ENV_SCENARIOS = ['pp-easy', 'pp-medium', 'pp-hard', 'tj-easy', 'tj-medium', 'tj-hard']
 MODEL_SCENARIOS = ['pp-easy', 'tj-easy']
 TJ_RESET_EPOCHS = [0, 400, 800, 1300]  # before, during and after the curriculum
+PP_GREEDY = [0.9, 0.5, 0.0]  # per-episode chance of stepping towards the prey (0 = random)
 
 _spec = importlib.util.spec_from_file_location('make_configs', os.path.join(REPO, 'configs', 'make_configs.py'))
 make_configs = importlib.util.module_from_spec(_spec)
@@ -86,6 +89,29 @@ def to_np(x):
     return np.asarray(x).copy()
 
 
+def prey_seeking_actions(pp_env, rng, p_greedy=0.8):
+    """Predator-Prey actions: with probability p_greedy step towards the prey, else random.
+
+    Random actions almost never get every predator onto the prey, so fixtures would never
+    exercise reaching the prey, early termination or success = 1. Both choices use `rng`.
+    """
+    prey = pp_env.prey_loc[0]
+    acts = []
+    for loc in pp_env.predator_loc:
+        greedy = rng.uniform() < p_greedy
+        rand_a = rng.randint(pp_env.naction)
+        dy, dx = prey[0] - loc[0], prey[1] - loc[1]
+        if not greedy:
+            acts.append(rand_a)
+        elif dy != 0 and abs(dy) >= abs(dx):
+            acts.append(0 if dy < 0 else 2)   # up / down
+        elif dx != 0:
+            acts.append(3 if dx < 0 else 1)   # left / right
+        else:
+            acts.append(4)                    # stay
+    return np.array(acts)
+
+
 def record_env(scen, seed, episodes, out_dir):
     base, flags, _ = make_configs.SCENARIOS[scen]
     args = parse_args('{} {} --seed {}'.format(base, flags, seed))
@@ -101,7 +127,10 @@ def record_env(scen, seed, episodes, out_dir):
         obs = [to_np(env.reset(epoch))[0]]
         actions, rewards, dones, infos = [], [], [], {}
         for t in range(args.max_steps):
-            a = act_rng.randint(nact, size=n)
+            if args.env_name == 'predator_prey':
+                a = prey_seeking_actions(env.env, act_rng, PP_GREEDY[e % len(PP_GREEDY)])
+            else:
+                a = act_rng.randint(nact, size=n)
             next_obs, reward, done, info = env.step([a])
             done = bool(done) or t == args.max_steps - 1
             obs.append(to_np(next_obs)[0])
