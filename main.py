@@ -133,7 +133,8 @@ def run(num_epochs):
         for n in range(args.epoch_size):
             if n == args.epoch_size - 1 and args.display:
                 trainer.display = True
-            s = trainer.train_batch(ep)
+            # global epoch, so epoch-dependent env state (TJ curriculum) continues after a resume
+            s = trainer.train_batch(args.resume_epoch + ep)
             merge_stat(s, stat)
             trainer.display = False
 
@@ -241,6 +242,7 @@ if resume_state is not None:
         np.random.set_state(resume_state['rng']['numpy'])
         random.setstate(resume_state['rng']['random'])
     print('Resuming {} from epoch {}'.format(args.save, args.resume_epoch))
+    (trainer.trainer if hasattr(trainer, 'trainer') else trainer).fast_forward(args.resume_epoch)
     del resume_state
 
 if args.load != '':

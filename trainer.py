@@ -335,6 +335,15 @@ class Trainer(object):
         loss.backward()
         return stat
 
+    def fast_forward(self, epoch):
+        """After a resume, bring the env's epoch-dependent state (the Traffic Junction arrival-rate
+        curriculum) to where an uninterrupted run would be after epochs 0 .. epoch-1. TJ resets draw
+        no randomness; envs without a curriculum are left untouched."""
+        base_env = getattr(self.env, 'env', self.env)
+        if epoch > 0 and hasattr(base_env, 'curriculum'):
+            for e in range(1, epoch):
+                self.env.reset(e)
+
     def run_batch(self, epoch):
         batch = []
         self.stats = dict()

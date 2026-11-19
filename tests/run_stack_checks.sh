@@ -68,6 +68,18 @@ assert 'rng' in d
   else
     fail "resume (see $WORK/resume_*.log)"
   fi
+  # TJ curriculum must continue across a resume (global epochs, envs fast-forwarded)
+  CUR="--curr_start 0 --curr_end 4 --add_rate_min 0.1 --add_rate_max 0.5"
+  TJR="$TJ_BASE --nagents 5 --dim 6 --max_steps 20 --difficulty easy $TINY $(arch_flags phase3) --nprocesses 2 --seed 5 $CUR"
+  $PY main.py $TJR --num_epochs 4 > "$WORK/resume_tj_full.log" 2>&1
+  $PY main.py $TJR --num_epochs 2 --save "$WORK/resume_tj_ck" > "$WORK/resume_tj_1.log" 2>&1
+  $PY main.py $TJR --num_epochs 4 --save "$WORK/resume_tj_ck" --resume > "$WORK/resume_tj_2.log" 2>&1
+  if [[ -n "$(grep '^Add-Rate' "$WORK/resume_tj_full.log")" ]] && \
+     diff <(grep '^Add-Rate' "$WORK/resume_tj_full.log") <(cat "$WORK/resume_tj_1.log" "$WORK/resume_tj_2.log" | grep '^Add-Rate') > /dev/null; then
+    pass "resume keeps the TJ curriculum"
+  else
+    fail "resume keeps the TJ curriculum (see $WORK/resume_tj_*.log)"
+  fi
 fi
 
 # ---------------------------------------------------------------- smoke runs

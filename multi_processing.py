@@ -20,6 +20,8 @@ class MultiProcessWorker(mp.Process):
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
         random.seed(self.seed)
+        if getattr(self.trainer.args, 'resume_epoch', 0):
+            self.trainer.fast_forward(self.trainer.args.resume_epoch)
 
         while True:
             # print(f"[Worker {self.id}] waiting for task", flush=True)
