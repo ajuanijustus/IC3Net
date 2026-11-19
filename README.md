@@ -74,6 +74,18 @@ Compared with the earlier state of this code (tag `legacy-aamas2027`), the curre
 - **Seeding:** `random`, numpy and torch are seeded in every process, with independent per-worker
   seeds. The StarCraft envs place units with Python's `random`, which was previously unseeded.
 
+### Known issue (not fixed here)
+
+IC3Net's hard attention (`--ic3net --phase 1`, inherited from the original IC3Net code) multiplies
+the gate into the alive mask in place, through a tensor that shares memory with the
+environment's `info['alive_mask']`. The trainer keeps the previous step's loss mask as a view of
+that array. So for environments that report an alive mask, an agent that is silent at step t+1
+has its step-t action, gate and value losses zeroed. Here that's StarCraft combat only: PP has no
+alive mask, IC3Net's gate is fixed open on TJ, StarCraft explore reports none, and the
+dual-pathway models don't modify the mask in place. It's confirmed on the legacy stack and left
+unchanged, so the `corrected-v1` StarCraft combat IC3Net runs behave like the original
+implementation. The successor codebase uses the intended (non-aliased) behaviour.
+
 `--legacy_gate_resample` reproduces the old gate behaviour exactly, for comparison. Checkpoints record
 their arguments, seeds and git SHA. The corrected experiment runs use tag `corrected-v1`.
 
