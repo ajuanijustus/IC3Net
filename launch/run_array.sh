@@ -12,6 +12,8 @@
 # skipped, and unfinished ones resume from their last checkpoint (--resume).
 #
 # Override paths with IC3_CONDA_ENV, TORCHCRAFT_DIR, OPENBW_MPQ_PATH if needed.
+# Memory: request it at submission (sbatch --mem=...); StarCraft runs grow over time.
+# A worker that dies or hangs makes the run exit with status 3; resubmit to resume.
 # DRY_RUN=1 prints the command instead of running it (no SLURM or conda needed).
 
 #SBATCH --account=baberc-human-agent-teaming
@@ -85,6 +87,7 @@ fi
 # ---- run
 mkdir -p "${OUT_DIR}/logs"
 export RUN_LABEL="${LABEL}"   # recorded in the checkpoint metadata
+export PYTHONUNBUFFERED=1     # log lines appear as they happen and aren't lost on exit
 
 {
   echo "==== ${LABEL}  job ${SLURM_JOB_ID:-?} task ${TASK}  $(date '+%Y-%m-%d %H:%M:%S')  host $(hostname)"
@@ -92,8 +95,11 @@ export RUN_LABEL="${LABEL}"   # recorded in the checkpoint metadata
   echo "cmd: ${CMD}"
 } | tee -a "${LOG_FILE}"
 
-${CMD} 2>&1 | tee -a "${LOG_FILE}"
-STATUS=${PIPESTATUS[0]}
+# Write straight to the log file. A pipe (| tee) can be held open by StarCraft game-server
+# processes that outlive Python, which kept finished jobs hanging until the time limit.
+${CMD} >> "${LOG_FILE}" 2>&1
+STATUS=$?
+[[ $STATUS -ne 0 ]] && tail -n 20 "${LOG_FILE}"   # show the failure in the SLURM output too
 
 if [[ $STATUS -eq 0 ]]; then
   touch "${SAVE_PATH}.done"

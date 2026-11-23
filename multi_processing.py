@@ -1,3 +1,5 @@
+import os
+import sys
 import time
 import random
 from utils import *
@@ -51,6 +53,7 @@ class MultiProcessTrainer(object):
     def __init__(self, args, trainer_maker):
         # print("[Trainer] __init__ start")
         self.comms = []
+        self.workers = []
         # itself will do the same job as workers
         self.nworkers = args.nprocesses - 1
         # One independent seed per worker, derived from the run seed. (The old scheme,
@@ -65,6 +68,7 @@ class MultiProcessTrainer(object):
             self.comms.append(comm)
             worker = MultiProcessWorker(i, trainer_maker, comm_remote, seed=self.worker_seeds[i])
             worker.start()
+            self.workers.append(worker)
             # print("[Trainer] workers started")
         # print("[Trainer] done creating workers")
         self.trainer = trainer_maker()
@@ -72,6 +76,32 @@ class MultiProcessTrainer(object):
         self.worker_grads = None
         self.is_random = args.random
         # print("[Trainer] __init__ done")
+
+    def _recv(self, i):
+        """Receive from worker i without waiting forever.
+
+        If the worker process has died (e.g. OOM-killed) or sends nothing for IC3_WORKER_TIMEOUT
+        seconds (default 1800; a game server it depends on may have died), stop all workers and
+        exit with status 3, so the job ends now and a resubmission resumes from the last checkpoint
+        instead of hanging until the time limit. Message order and results are unchanged.
+        """
+        timeout = float(os.environ.get('IC3_WORKER_TIMEOUT', 1800))
+        waited = 0.0
+        while not self.comms[i].poll(10):
+            waited += 10
+            worker = self.workers[i]
+            if not worker.is_alive() or waited >= timeout:
+                if worker.is_alive():
+                    reason = 'sent nothing for {:.0f}s'.format(waited)
+                else:
+                    reason = 'died (exit code {})'.format(worker.exitcode)
+                print('FATAL: worker {} {}; stopping so the run can be resumed.'.format(i, reason), flush=True)
+                sys.stderr.flush()
+                for w in self.workers:
+                    if w.is_alive():
+                        w.terminate()
+                os._exit(3)
+        return self.comms[i].recv()
 
     def quit(self):
         for comm in self.comms:
@@ -87,9 +117,9 @@ class MultiProcessTrainer(object):
 
         if self.worker_grads is None:
             self.worker_grads = []
-            for comm in self.comms:
+            for i, comm in enumerate(self.comms):
                 comm.send('send_grads')
-                self.worker_grads.append(comm.recv())
+                self.worker_grads.append(self._recv(i))
 
     def train_batch(self, epoch):
         # run workers in parallel
@@ -103,8 +133,8 @@ class MultiProcessTrainer(object):
         merge_stat(s, stat)
 
         # check if workers are finished
-        for comm in self.comms:
-            s = comm.recv()
+        for i in range(len(self.comms)):
+            s = self._recv(i)
             merge_stat(s, stat)
 
         # add gradients of workers
